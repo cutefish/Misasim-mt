@@ -1,2 +1,5 @@
 *.pyc
-
+cscope*
+csfile
+misasim
+misasim_tags

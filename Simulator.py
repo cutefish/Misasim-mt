@@ -6,47 +6,9 @@ from Analyzer import *
 from Support import *
 from os import listdir
 from random import seed
-
-MIPS_Opcodes = ['add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
-                'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'and', \
-                'or', 'andi', 'ori', 'nor', 'xor', 'xori', 'sll', 'sllv', \
-                'srl', 'srlv', 'sra', 'srav', 'lw', 'sw', 'lb', 'lbu', 'sb', \
-                'lui', 'beq', 'bne', 'slt', 'slti', 'sltu', 'sltui', 'j', \
-                'jr', 'jal', 'swi']
-
-Directives = ['.data', '.text', '.alloc', '.word']
-
-Three_Reg_Opcodes = ['add', 'sub', 'addu', 'subu', 'and', 'or', 'nor', 'xor', \
-                     'sllv', 'srlv', 'srav', 'slt', 'sltu']
-
-Two_Reg_Sex_Immd_Opcodes = ['addi', 'slti']
-
-Two_Reg_Immd_Opcodes = ['addiu', 'andi', 'ori', 'xori', 'sll', 'srl', 'sra', 'sltiu']
-
-Two_Reg_Opcodes = ['mult', 'multu', 'div', 'divu']
-
-One_Reg_Opcodes = ['mfhi', 'mflo', 'jr']
-
-One_Reg_Immd_Opcodes = ['lui']
-
-One_Reg_Addr_Opcodes = ['sw', 'lw', 'lb', 'lbu', 'sb']
-
-One_Label_Opcodes = ['j', 'jal']
-
-Two_Reg_Label_Opcodes = ['beq', 'bne']
-
-One_Immd_Opcodes = ['swi']
-
-Opcode_Classes = {'Arith' : ('add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
-                             'mult', 'multu', 'div', 'divu', 'slt', 'slti', \
-                             'sltu', 'sltui'),
-                  'Logic' : ('and', 'or', 'andi', 'ori', 'nor', 'xor', 'xori'),
-                  'Shift' : ('sll', 'sllv', 'srl', 'srlv', 'sra', 'srav'),
-                  'Branch' : ('beq', 'bne'),
-                  'Jump' : ('j', 'jr', 'jal', 'swi'),
-                  'Load' :  ('lw', 'lb', 'lbu'),
-                  'Store' : ('sw', 'sb'),
-                  'Xfer' : ('mfhi', 'mflo', 'lui')}
+from Opcodes import *
+from Instructions import *
+from Core import *
 
 class Simulation :
     def __init__(Self, Parent=None) :
@@ -64,23 +26,26 @@ class Simulation :
         Self.Restart()
         Self.Silent = False
         Self.ErrorFile = None
+        Self.Cores = []
+        for CoreID in range(Parent.NumCores):
+            Self.Cores.append(Core(CoreID, Self))
 
     def Restart(Self) :
         """ This routine restores the simulation to the pre-execution state. """
         Self.Trace = []
-        Self.IP = Self.CodeBase
+        for Core in Self.Cores:
+            Core.Restart()
         Self.Nav = Navigator(Self)
         Self.Mem = Self.InitialMem.copy()
-        Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
         Self.WECount = 0
 
     def Goto_Start_of_Trace(Self) :
         """ This routine sets processor state and the navigator to the begining
         of the trace. """
-        Self.IP = Self.CodeBase
+        for Core in Self.Cores:
+            Core.Restart()
         Self.Nav.Initialize()
         Self.Mem = Self.InitialMem.copy()
-        Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
 
     def Stack_Address(Self, Address) :
         """ Returns True if StackBase <= Address <= StartingSP, otherwise returns False."""

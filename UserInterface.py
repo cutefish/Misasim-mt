@@ -33,6 +33,7 @@ class MiSaSiM(Tk) :
         Self.FontFace = 'normal'
         Self.ButtonMode = 'icon+name'
         Self.DisplayBase = 10
+        Self.NumCores = 1
 
         # load options parameters if options init file exists
         Self.Load_Init_File()
