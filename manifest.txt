@@ -1,0 +1,12 @@
+Misasim.py
+Simulator.pyc
+UserInterface.pyc
+Analyzer.pyc
+Support.pyc
+test01.gif
+test02.gif
+test03.gif
+test04.gif
+test05.gif
+fact.asm
+
