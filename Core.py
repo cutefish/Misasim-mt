@@ -29,7 +29,7 @@ class Core:
                 Self.IP, Self.CoreID))
         I = Self.Lookup_Instruction(Self.IP)
         if I:
-            Result, OldValue = I.RunOn(Self.Executor)
+            Result, OldValue = I.ExecOn(Self.Executor)
             Self.Executor.Inc_IP()
             SimLogger.traceInst(I, Result, OldValue)
             return 0
@@ -45,6 +45,9 @@ class InstExecutor:
 
     def Inc_IP(Self):
         Self.Core.IP += 4
+
+    def Jmpto_IP(Self, IP):
+        Self.Core.IP = IP
 
     def Read_Reg(Self, RegNum) :
         """ This routine returns a register value; a warning message is printed

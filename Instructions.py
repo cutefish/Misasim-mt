@@ -71,9 +71,9 @@ class Three_Reg(Instruction) :
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def RunOn(Self, Executor) :
-        Result = Self.Op(Self.Read_Reg(Self.Src1),Self.Read_Reg(Self.Src2))
-        OldValue = Self.Write_Reg(Self.Dest, Result)
+    def ExecOn(Self, Executor) :
+        Result = Self.Op(Executor.Read_Reg(Self.Src1),Executor.Read_Reg(Self.Src2))
+        OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, $%02i, $%02i      %s' % \
@@ -103,11 +103,11 @@ class Two_Reg(Instruction) :
            (not Tokens[2:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec (Self) :
-        if Self.Op == Div_Op and Self.Read_Reg(Self.Src2) == 0 :
-            Self.Sim.Print_Error('Divide by zero')
-        Result = Self.Op(Self.Read_Reg(Self.Src1), Self.Read_Reg(Self.Src2))
-        OldValue = Self.Write_Reg('HiLo', Result)
+    def ExecOn(Self, Executor) :
+        if Self.Op == Div_Op and Executor.Read_Reg(Self.Src2) == 0 :
+            SimLogger.error('Divide by zero')
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), Executor.Read_Reg(Self.Src2))
+        OldValue = Executor.Write_Reg('HiLo', Result)
         return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, $%02i           %s' % \
@@ -132,9 +132,9 @@ class One_Reg_CoreID(Instruction):
         Self.Comment = Parse_Comment(Tokens[1:])
         if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
             return ''
-    def Exec(Self, Core):
-        Self.Write_Reg(Self.Reg, Core.CoreID)
-        return Core.CoreID
+    def ExecOn(Self, Executor):
+        Self.Write_Reg(Self.Reg, Executor.Core.CoreID)
+        return Executor.Core.CoreID
 
 class One_Reg(Instruction) :
     def Parse(Self, Tokens) :
@@ -149,20 +149,16 @@ class One_Reg(Instruction) :
         if Self.Opcode in ['mfhi', 'mflo'] :
             Self.Dest = Self.Reg
         return Self
-    def Exec (Self) :
+    def ExecOn(Self, Executor) :
         if Self.Opcode == 'jr' :
+            Executor.Jmpto_IP(Executor.Read_Reg(Self.Reg) - 4)
             return None, None
         elif Self.Opcode == 'mfhi' :
-            Result = Self.Read_Reg('HiLo')[0]
+            Result = Executor.Read_Reg('HiLo')[0]
         elif Self.Opcode == 'mflo' :
-            Result = Self.Read_Reg('HiLo')[1]
-        OldValue = Self.Write_Reg(Self.Reg, Result)
+            Result = Executor.Read_Reg('HiLo')[1]
+        OldValue = Executor.Write_Reg(Self.Reg, Result)
         return Result, OldValue
-    def Adjust_IP (Self) :
-        if Self.Opcode == 'jr' :
-            Self.Sim.IP = Self.Read_Reg(Self.Reg)
-        else :
-            Instruction.Adjust_IP(Self)
     def Print(Self) :
         return '%4i %s %-5s $%02i                %s' % \
                (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Reg, \
@@ -195,9 +191,9 @@ class Two_Reg_Sex_Immd(Instruction) :
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec (Self) :
-        Result = Self.Op(Self.Read_Reg(Self.Src1), Self.Src2)
-        OldValue = Self.Write_Reg(Self.Dest, Result)
+    def ExecOn(Self, Executor) :
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.Src2)
+        OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, $%02i, %-8i %s' % \
@@ -232,9 +228,9 @@ class Two_Reg_Immd(Instruction) :
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec (Self) :
-        Result = Self.Op(Self.Read_Reg(Self.Src1), Self.Src2)
-        OldValue = Self.Write_Reg(Self.Dest, Result)
+    def ExecOn(Self, Executor) :
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.Src2)
+        OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, $%02i, %-8i %s' % \
@@ -269,9 +265,7 @@ class Two_Reg_Label(Instruction) :
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec (Self) :
-        return None, None
-    def Adjust_IP (Self) :
+    def ExecOn(Self, Executor) :
         if Self.Target == '' :
             Target = Self.Sim.IP + 4 + (Self.Offset * 4)
         else :
@@ -283,6 +277,7 @@ class Two_Reg_Label(Instruction) :
             Self.Sim.IP = Target
         else :
             Instruction.Adjust_IP(Self)
+        return None, None
     def Print(Self) :
         return '%4i %s %-5s $%02i, $%02i, %-8s %s' % \
                (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Src1,\
