@@ -1,8 +1,10 @@
+from Simulator import SimLogger
+from ParseUtils import *
+
 class Instruction :
-    def __init__(Self, Sim, Opcode, Address) :
+    def __init__(Self, Opcode, Address) :
         Self.Address = Address
         Self.Opcode = Opcode
-        Self.Sim = Sim
 
     def __repr__(Self) :
         return '[%04i: %s]' % (Self.Address, Self.Opcode)
@@ -48,13 +50,13 @@ class Instruction :
         else : 
             return False
 
-    def Lookup_Label(Self, Label) :
+    def Lookup_Label(Self, Label, Symbols) :
         """ This routine looks up a label in the symbol table and returns the
         corresponding address. """
-        if Label in Self.Sim.Symbols :
-            return Self.Sim.Symbols[Label]
+        if Label in Symbols :
+            return Symbols[Label]
         else :
-            Self.Sim.Print_Error('Label %s has not been defined.' % (Label))
+            Self.SimLogger.error('Label %s has not been defined.' % (Label))
             return ''
 
 class Three_Reg(Instruction) :
@@ -69,7 +71,7 @@ class Three_Reg(Instruction) :
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec (Self) :
+    def RunOn(Self, Executor) :
         Result = Self.Op(Self.Read_Reg(Self.Src1),Self.Read_Reg(Self.Src2))
         OldValue = Self.Write_Reg(Self.Dest, Result)
         return Result, OldValue

@@ -1,23 +1,47 @@
 #MiSaSim-mt Core
 #Written by Xiao Yu
 
+from Simulator import SimLogger
+
 class Core:
+    Running = 1
+    Idling = 2
+    
     def __init__(Self, CoreID, Parent):
         Self.Regs = {0:0, 29:Parent.StratingSP, 31:Parent.ReturnIP}
         Self.CoreID = CoreID
+        Self.CodeBase = Parent.CodeBase
         Self.IP = 0
-        Self.Executor = InstrExecutor(Self, Parent)
-        Self.Mem = Parent.Mem
+        Self.Instructions = Parent.Instructions
+        Self.Executor = InstExecutor(Self, Parent)
+        Self.Mem = Parent.Mem #should be a memory agent, simplified here.
+        Self.Max_Inst_Address = Self.Instructions[-1].Address
+        Self.Status = Self.Running
 
 
     def Restart(Self):
         Self.IP = Parent.CodeBase
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
 
-class InstrExecutor:
-    def __init__(Self, Core, Listener):
+    def NextStep(Self):
+        if not (Self.CodeBase <= Self.IP <= Self.Max_Inst_Address):
+            SimLogger.error("Invalid IP Address [%s] on Core [%s]" %(
+                Self.IP, Self.CoreID))
+        I = Self.Lookup_Instruction(Self.IP)
+        if I:
+            Result, OldValue = I.RunOn(Self.Executor)
+            Self.Executor.Inc_IP()
+            SimLogger.traceInst(I, Result, OldValue)
+            return 0
+        else:
+            SimLogger.error('Attempt to execute an invlaid IP %s' %(Self.IP))
+            return -1
+        if Self.IP == Self.Max_Inst_Address + 4:
+            Self.Status = Self.Idling
+
+class InstExecutor:
+    def __init__(Self, Core):
         Self.Core = Core
-        Self.Listener = Listener
 
     def Inc_IP(Self):
         Self.Core.IP += 4
@@ -28,9 +52,9 @@ class InstrExecutor:
         if RegNum in Self.Core.Regs :
             return Core.Regs[RegNum]
         if RegNum == 'HiLo' :
-            Self.Listener.warning('HiLo read before defined')
+            SimLogger.warning('HiLo read before defined')
             return 0, 0
-        Self.Listener.warning('$%02i read before defined' % RegNum)
+        SimLogger.warning('$%02i read before defined' % RegNum)
         return 0
 
     def Write_Reg(Self, RegNum, Value) :
@@ -38,7 +62,7 @@ class InstrExecutor:
         for the trace. A warning message is printed if a write to register zero
         is attempted. """
         if RegNum == 0 :
-            Self.Listener.error('$00 cannot be modified')
+            SimLogger.error('$00 cannot be modified')
             return 0
         if RegNum in Self.Core.Regs :
             OldValue = Self.Core.Regs[RegNum]
@@ -59,17 +83,17 @@ class InstrExecutor:
         """ This routine returns a value from memory; a warning message is printed
         if the memory location has not been initialized. """
         if Address < 0 :
-            Self.Listener.warning('%i is a negative address' % (Address))
+            SimLogger.warning('%i is a negative address' % (Address))
         if Address in Self.Core.Mem :
             return Self.Core.Mem[Address]
-        Self.Listener.warning('mem[%04i] read before defined' % (Address))
+        SimLogger.warning('mem[%04i] read before defined' % (Address))
         return 0
 
     def Write_Mem(Self, Address, Value) :
         """ This routine writes a value to memory. The replaced value is returned
         for the trace. """
         if Address < 0 :
-            Self.Listener.warning('%i is a negative address' % (Address))
+            SimLogger.warning('%i is a negative address' % (Address))
         if Address in Self.Core.Mem :
             OldValue = Self.Core.Mem[Address]
         else :
