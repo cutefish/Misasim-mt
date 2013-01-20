@@ -1,5 +1,6 @@
-from Simulator import SimLogger
-from ParseUtils import *
+
+from Logging import RootLogger as Logger
+from Parser import *
 
 class Instruction :
     def __init__(Self, Opcode, Address) :
@@ -12,8 +13,8 @@ class Instruction :
     def Opcode(Self) :
         return Self.Opcode
 
-#    def Adjust_IP(Self, Core) :
-#        Core.IP += 4
+    def Adjust_IP(Self, Executor) :
+        Executor.Inc_IP()
 
 #    def Log_In_Trace(Self, Result, OldValue) :
 #        Self.Sim.Trace.append((Self, Result, OldValue))
@@ -50,23 +51,61 @@ class Instruction :
         else : 
             return False
 
-    def Lookup_Label(Self, Label, Symbols) :
-        """ This routine looks up a label in the symbol table and returns the
-        corresponding address. """
-        if Label in Symbols :
-            return Symbols[Label]
-        else :
-            Self.SimLogger.error('Label %s has not been defined.' % (Label))
-            return ''
+    def Print_Address(Self, Address):
+        return '%4i' %Address
+
+    def Print_Label (Self, String) :
+        """ If string is non-null label, return padded with colon; else return
+        padding only. """
+        if String == '' :
+            return ' ' * 10
+        return '%s:%s' % (String, (9 - len(String)) * ' ')
+
+    def Print_Opcode(Self, Opcode):
+        return '%-5s' %Opcode
+
+    def Print_Reg(Self, RegNum):
+        return '$%02i' %RegNum
+
+    def Print_Immd(Self, Immd):
+        return '%-13i' %Immd
+
+
+    def Print_Offset(Self, Offset, RegNum):
+        return '%s($%02i)' %(Offset, RegNum)
+
+    def Print_Args(Self, Arg1, Arg2, Arg3):
+        Return = ''
+        if Arg1 <> '':
+            Return += Arg1
+        if Arg2 <> '':
+            Return += ', '
+            Return += Arg2
+        if Arg3 <> '':
+            Return += ', '
+            Return += Arg3
+        return Return.ljust(28)
+
+    def Format(Self, Address, Label, Opcode, Arg1, Arg2, Arg3, Comment):
+        Return = ''
+        Return += Self.Print_Address(Address) + ' '     #width = 5
+        Return += Self.Print_Label(Label) + ' '         #width = 11
+        Return += Self.Print_Opcode(Opcode) + ' '       #width = 6
+        Return += Self.Print_Args(Arg1, Arg2, Arg3)     #width = 28
+        Return += Comment
+        return Return
+
+    def __str__(Self):
+        return Self.Print()
 
 class Three_Reg(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 3 :
             return ''
-        Self.Dest = Parse_Register(Tokens[0])
-        Self.Src1 = Parse_Register(Tokens[1])
-        Self.Src2 = Parse_Register(Tokens[2])
-        Self.Comment = Parse_Comment(Tokens[3:])
+        Self.Dest = Parser.Parse_Register(Tokens[0])
+        Self.Src1 = Parser.Parse_Register(Tokens[1])
+        Self.Src2 = Parser.Parse_Register(Tokens[2])
+        Self.Comment = Parser.Parse_Comment(Tokens[3:])
         if Self.Dest == '' or Self.Src1 == '' or Self.Src2 == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
@@ -76,13 +115,15 @@ class Three_Reg(Instruction) :
         OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, $%02i, $%02i      %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Dest, \
-                Self.Src1, Self.Src2, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Dest),
+                           Self.Print_Reg(Self.Src1),
+                           Self.Print_Reg(Self.Src2),
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', Print_Label(Self.Label)),
+                ('Label', Self.Print_Label(Self.Label)),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Dest)),
                 (None, ', '),
@@ -93,30 +134,32 @@ class Three_Reg(Instruction) :
                 ('Comment', ' %s' % (Self.Comment)))
 
 class Two_Reg(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 2 :
             return ''
-        Self.Src1 = Parse_Register(Tokens[0])
-        Self.Src2 = Parse_Register(Tokens[1])
-        Self.Comment = Parse_Comment(Tokens[2:])
+        Self.Src1 = Parser.Parse_Register(Tokens[0])
+        Self.Src2 = Parser.Parse_Register(Tokens[1])
+        Self.Comment = Parser.Parse_Comment(Tokens[2:])
         if Self.Src1 == '' or Self.Src2 == '' or \
            (not Tokens[2:] == [] and Self.Comment == '') :
             return ''
         return Self
     def ExecOn(Self, Executor) :
         if Self.Op == Div_Op and Executor.Read_Reg(Self.Src2) == 0 :
-            SimLogger.error('Divide by zero')
+            Logger.error('Divide by zero')
         Result = Self.Op(Executor.Read_Reg(Self.Src1), Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg('HiLo', Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, $%02i           %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Src1, \
-                Self.Src2, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Src1),
+                           Self.Print_Reg(Self.Src2),
+                           '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Src1)),
                 (None, ', '),
@@ -125,23 +168,32 @@ class Two_Reg(Instruction) :
                 ('Comment', ' %s' % (Self.Comment)))
 
 class One_Reg_CoreID(Instruction):
-    def Parse(Self, Tokens):
+    def Parse(Self, Tokens, Parser):
         if len(Tokens) < 1: 
             return ''
-        Self.Reg = Parse_Register(Tokens[0])
-        Self.Comment = Parse_Comment(Tokens[1:])
+        Self.Reg = Parser.Parse_Register(Tokens[0])
+        Self.Comment = Parser.Parse_Comment(Tokens[1:])
         if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
             return ''
+        return Self
     def ExecOn(Self, Executor):
         Self.Write_Reg(Self.Reg, Executor.Core.CoreID)
         return Executor.Core.CoreID
+    def Print(Self):
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Reg),
+                           '','',
+                           Self.Comment)
+    def Tagged_Print(Self):
+        return (('Address', '%4i' %(Self.Address)),
+                ('Reg', '$%02i' %(Self.Reg)))
 
 class One_Reg(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 1 :
             return ''
-        Self.Reg = Parse_Register(Tokens[0])
-        Self.Comment = Parse_Comment(Tokens[1:])
+        Self.Reg = Parser.Parse_Register(Tokens[0])
+        Self.Comment = Parser.Parse_Comment(Tokens[1:])
         if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
             return ''
         if Self.Opcode == 'jr' :
@@ -160,147 +212,163 @@ class One_Reg(Instruction) :
         OldValue = Executor.Write_Reg(Self.Reg, Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i                %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Reg, \
-                Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Reg),
+                           '', '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % Self.Address),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Reg)),
                 (None, '               '),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class Two_Reg_Sex_Immd(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 3 :
             return ''
-        Self.Dest = Parse_Register(Tokens[0])
-        Self.Src1 = Parse_Register(Tokens[1])
-        Label, Immd = Parse_Label_or_Immediate(Tokens[2])
-        if Label :
-            Self.Src2 = Self.Lookup_Label(Label)
-            Self.Immed_Label = Label
-        elif Immd <> '' :
-            Self.Src2 = (Immd + 32768) % 65536 - 32768
+        Self.Dest = Parser.Parse_Register(Tokens[0])
+        Self.Src1 = Parser.Parse_Register(Tokens[1])
+        Self.RefTarget = Reference()
+        Label, Immd = Parser.Parse_Label_or_Immediate(Tokens[2])
+        if Immd <> '':
+            Self.RefTarget.Value = (Immd + 32768) % 65536 - 32768
+            Self.RefTarget.Alias = 'immd'
+            Self.RefTarget.Solved = True
+        elif Label :
+            Self.RefTarget.Alias = Label #will be solved later
         else :
-            Self.Src2 = Immd
-        Self.Comment = Parse_Comment(Tokens[3:])
-        if Self.Dest == '' or Self.Src1 == '' or Self.Src2 == '' or \
+            #should never be here
+            Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+        Self.Comment = Parser.Parse_Comment(Tokens[3:])
+        if Self.Dest == '' or Self.Src1 == '' or Self.RefTarget.Alias == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def ExecOn(Self, Executor) :
-        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.Src2)
+    def ExecOn(Self, Executor):
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.RefTarget.Value)
         OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, $%02i, %-8i %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Dest,\
-                Self.Src1, Self.Src2, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Dest),
+                           Self.Print_Reg(Self.Src1),
+                           Self.RefTarget.Print(),
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Dest)),
                 (None, ', '),
                 ('Reg', '$%02i' % (Self.Src1)),
                 (None, ', '),
-                ('Immd', '%-8i' % (Self.Src2)),
+                ('Immd', '%s' % (Self.RefTarget.Print())),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class Two_Reg_Immd(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 3 :
             return ''
-        Self.Dest = Parse_Register(Tokens[0])
-        Self.Src1 = Parse_Register(Tokens[1])
-        Label,  Immd = Parse_Label_or_Immediate(Tokens[2])
-        if Label :
-            Self.Src2 = Self.Lookup_Label(Label)
-            Self.Immed_Label = Label
+        Self.Dest = Parser.Parse_Register(Tokens[0])
+        Self.Src1 = Parser.Parse_Register(Tokens[1])
+        Self.RefTarget = Reference()
+        Label,  Immd = Parser.Parse_Label_or_Immediate(Tokens[2])
+        if Immd:
+            Self.RefTarget.Value = Immd
+            Self.RefTarget.Alias = 'immd'
+            Self.RefTarget.Solved = True
+        elif Label:
+            Self.RefTarget.Alias = Label #will be solved later
         else :
-            Self.Src2 = Immd
-        Self.Comment = Parse_Comment(Tokens[3:])
-        if Self.Dest == '' or Self.Src1 == '' or Self.Src2 == '' or \
+            Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+        Self.Comment = Parser.Parse_Comment(Tokens[3:])
+        if Self.Dest == '' or Self.Src1 == '' or Self.RefTarget.Alias == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.Src2)
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.RefTarget.Value)
         OldValue = Executor.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, $%02i, %-8i %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Dest,\
-                Self.Src1, Self.Src2, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Dest),
+                           Self.Print_Reg(Self.Src1),
+                           Self.RefTarget.Print(),
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Dest)),
                 (None, ', '),
                 ('Reg', '$%02i' % (Self.Src1)),
                 (None, ', '),
-                ('Immd', '%-8i' % (Self.Src2)),
+                ('Immd', '%s' % (Self.RefTarget.Print())),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class Two_Reg_Label(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 3 :
             return ''
-        Self.Src1 = Parse_Register(Tokens[0])
-        Self.Src2 = Parse_Register(Tokens[1])
-        Self.Target = Parse_Label_Ref(Tokens[2])
-        if Self.Target == '' :
-            Self.Offset = Parse_Immediate(Tokens[2])
+        Self.Src1 = Parser.Parse_Register(Tokens[0])
+        Self.Src2 = Parser.Parse_Register(Tokens[1])
+        Self.RefTarget = Reference()
+        Label, Immd = Parser.Parse_Label_or_Immediate(Tokens[2])
+        if Immd <> '':
+            Self.RefTarget.Value = Self.Address + Immd * 4
+            Self.RefTarget.Alias = 'immd'
+            Self.RefTarget.Solved = True
+        elif Label :
+            Self.RefTarget.Alias = Label #will be solved later
         else :
-            Self.Offset = False
-        Self.Comment = Parse_Comment(Tokens[3:])
+            #should never be here
+            Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+        Self.Comment = Parser.Parse_Comment(Tokens[3:])
         if Self.Src1 == '' or Self.Src2 == '' or \
-           (Self.Target == '' and Self.Offset == '') or \
+           Self.RefTarget.Alias == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        if Self.Target == '' :
-            Target = Self.Sim.IP + 4 + (Self.Offset * 4)
-        else :
-            Target = Self.Lookup_Label(Self.Target)
         Predicate = Self.Read_Reg(Self.Src1) == Self.Read_Reg(Self.Src2)
         if Self.Opcode == 'bne' :
             Predicate = Predicate ^ 1
         if Predicate :
-            Self.Sim.IP = Target
+            Executor.Jmpto_IP(Self.RefTarget.Value)
         else :
-            Instruction.Adjust_IP(Self)
+            Instruction.Adjust_IP(Self, Executor)
         return None, None
     def Print(Self) :
-        return '%4i %s %-5s $%02i, $%02i, %-8s %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Src1,\
-                Self.Src2, (Self.Offset or Self.Target), Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Src1),
+                           Self.Print_Reg(Self.Src2),
+                           Self.RefTarget.Print(),
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', Print_Label(Self.Label)),
+                ('Label', Self.Print_Label(Self.Label)),
                 ('Opcode', ' %-5s ' % Self.Opcode),
                 ('Reg', '$%02i' % (Self.Src1)),
                 (None, ', '),
                 ('Reg', '$%02i' % (Self.Src2)),
                 (None, ', '),
-                ('Label', '%-8s' % (Self.Offset or Self.Target)),
+                ('Label', '%s' % (RefTarget.Print())),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class One_Reg_Immd(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 2 :
             return ''
-        Self.Dest = Parse_Register(Tokens[0])
-        Self.Src1 = Parse_Immediate(Tokens[1])
-        Self.Comment = Parse_Comment(Tokens[2:])
+        Self.Dest = Parser.Parse_Register(Tokens[0])
+        Self.Src1 = Parser.Parse_Immediate(Tokens[1])
+        Self.Comment = Parser.Parse_Comment(Tokens[2:])
         if Self.Dest == '' or Self.Src1 == '' or \
            (not Tokens[2:] == [] and Self.Comment == '') :
             return ''
@@ -310,13 +378,15 @@ class One_Reg_Immd(Instruction) :
         OldValue = Self.Write_Reg(Self.Dest, Result)
         return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, %-13i %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Dest,\
-                Self.Src1, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Dest),
+                           Self.Print_Reg(Self.Src1),
+                           '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', Print_Label(Self.Label)),
+                ('Label', Self.Print_Label(Self.Label)),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Dest)),
                 (None, ', '),
@@ -324,21 +394,23 @@ class One_Reg_Immd(Instruction) :
                 ('Comment', ' %s' % (Self.Comment)))
 
 class One_Reg_Addr(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 2 :
             return ''
-        Self.Data = Parse_Register(Tokens[0])
-        Offset, Self.Reg = Parse_Address(Tokens[1])
-        Label,  Immd = Parse_Label_or_Immediate(Offset)
-        if not Label and Immd == '' :
-            return ''
+        Self.Data = Parser.Parse_Register(Tokens[0])
+        Offset, Self.Reg = Parser.Parse_Address(Tokens[1])
+        Self.RefTarget = Reference()
+        Label,  Immd = Parser.Parse_Label_or_Immediate(Offset)
+        if Immd:
+            Self.RefTarget.Value = Immd
+            Self.RefTarget.Alias = 'immd'
+            Self.RefTarget.Solved = True
         if Label :
-            Self.Offset = Self.Lookup_Label(Label)
-            Self.Immed_Label = Label
+            Self.RefTarget.Alias = Label #will be solved later
         else :
-            Self.Offset = Immd
-        Self.Comment = Parse_Comment(Tokens[2:])
-        if Self.Data == '' or Self.Offset == '' or Self.Reg == '' or \
+            Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+        Self.Comment = Parser.Parse_Comment(Tokens[2:])
+        if Self.Data == '' or Self.RefTarget.Alias == '' or Self.Reg == '' or \
            (not Tokens[2:] == [] and Self.Comment == '') :
             return ''
         if Self.Opcode in ('lw', 'lb', 'lbu') :
@@ -348,8 +420,8 @@ class One_Reg_Addr(Instruction) :
             Self.Src1 = Self.Data
             Self.Src2 = Self.Reg
         return Self
-    def Exec(Self) :
-        Address = Self.Read_Reg(Self.Reg) + Self.Offset
+    def ExecOn(Self, Parser) :
+        Address = Self.Read_Reg(Self.Reg) + Self.RefTarget.Value
         if Self.Opcode in ('lb', 'lbu') :   # lb, lbu instructions
             Shift = 8 * (Address % 4)
             Address &= -4
@@ -370,7 +442,7 @@ class One_Reg_Addr(Instruction) :
             OldValue = Self.Write_Mem(Address, Result)
             return Result, OldValue
         if Address % 4 <> 0 :
-            Self.Sim.Print_Error('Effective Address = %d; memory addresses must be word aligned' % (Address))
+            Logger.error('Effective Address = %d; memory addresses must be word aligned' % (Address))
             Address &= -4
         if Self.Opcode == 'lw' :        # lw instruction
             Result = Self.Read_Mem(Address)
@@ -381,58 +453,64 @@ class One_Reg_Addr(Instruction) :
             OldValue = Self.Write_Mem(Address, Result)
             return Result, OldValue
     def Print(Self) :
-        return '%4i %s %-5s $%02i, %4i($%02i)     %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Data,\
-                Self.Offset, Self.Reg, Self.Comment)
+        return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
+               (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Data,\
+                Self.RefTarget.Print(), Self.Reg, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Data),
+                           Self.Print_Offset(Self.RefTarget.Print(), Self.Reg),
+                           '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Reg', '$%02i' % (Self.Data)),
                 (None, ', '),
-                ('Immd', '%4i' % (Self.Offset)),
+                ('Immd', '%s' % (RefTarget.Print())),
                 (None, '('),
                 ('Reg', '$%02i' % (Self.Reg)),
                 (None, ')    '),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class One_Label(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 1 :
             return ''
-        Self.Target = Parse_Label_Ref(Tokens[0])
-        Self.Comment = Parse_Comment(Tokens[1:])
-        if Self.Target == '' or (not Tokens[1:] == [] and Self.Comment == '') :
+        Self.RefTarget = Reference()
+        Self.RefTarget.Alias = Parser.Parse_Label_Ref(Tokens[0])
+        Self.Comment = Parser.Parse_Comment(Tokens[1:])
+        if Self.RefTarget.Alias == '' or (not Tokens[1:] == [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec(Self) :
+    def ExecOn(Self, Executor) :
+        Executor.Jmpto_IP(Self.RefTarget.Value)
         if Self.Opcode == 'j' :         # j instruction
             return None, None
         elif Self.Opcode == 'jal' :     # jal instruction
-            Result = Self.Sim.IP+4
+            Result = Executor.Core.IP + 4
             OldValue = Self.Write_Reg(31, Result)
             return Result, OldValue
-    def Adjust_IP(Self) :
-        Self.Sim.IP = Self.Lookup_Label(Self.Target)
     def Print(Self) :
-        return '%4i %s %-5s %-18s %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Target, \
-                Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.RefTarget.Print(),
+                           '', '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', (Print_Label(Self.Label))),
+                ('Label', (Self.Print_Label(Self.Label))),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Label', '%-18s' % (Self.Target)),
+                ('Label', '%-18s' % (Self.RefTarget.Print())),
                 ('Comment', ' %s' % (Self.Comment)))
 
 class One_Immd(Instruction) :
-    def Parse(Self, Tokens) :
+    def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 1 :
             return ''
-        Self.Src1 = Parse_Immediate(Tokens[0])
-        Self.Comment = Parse_Comment(Tokens[1:])
+        Self.Src1 = Parser.Parse_Immediate(Tokens[0])
+        Self.Comment = Parser.Parse_Comment(Tokens[1:])
         if Self.Src1 == '' or (Tokens[1:] <> [] and Self.Comment == '') :
             return ''
         return Self
@@ -440,19 +518,34 @@ class One_Immd(Instruction) :
         if Self.Sim.Handler.Known_Interrupt(Self.Src1) :
             return Self.Sim.Handler.Call(Self.Src1)
         else :
-            Self.Sim.Print_Error('%i is an undefined software interrupt.' % (Self.Src1))
+            Logger.error('%i is an undefined software interrupt.' % (Self.Src1))
             return {}, {}
     def Print(Self) :
         return '%4i %s %-5s %i                %s' % \
-               (Self.Address, Print_Label(Self.Label), Self.Opcode, Self.Dest,\
+               (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Dest,\
                 Self.Src1, Self.Comment)
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Immd(Self.Src1),
+                           '', '',
+                           Self.Comment)
     def Tagged_Print(Self) :
         return (('Address', '%4i' % (Self.Address)),
                 (None, ' '),
-                ('Label', Print_Label(Self.Label)),
+                ('Label', Self.Print_Label(Self.Label)),
                 ('Opcode', ' %-5s ' % (Self.Opcode)),
                 ('Immd', '%i' % (Self.Src1)),
                 (None, '               '),
                 ('Comment', ' %s' % (Self.Comment)))
 
+class Reference:
+    def __init__(Self):
+        Self.Solved = False
+        Self.Alias = ''
+        Self.Value = ''
 
+    def Print(Self):
+        if not Self.Solved:
+            return '%s(unsolved)' %(Self.Alias)
+        if Self.Alias == 'immd':
+            return '%-13i' %(Self.Value)
+        return '%s(%04i)' %(Self.Alias, Self.Value)

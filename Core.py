@@ -1,7 +1,7 @@
 #MiSaSim-mt Core
 #Written by Xiao Yu
 
-from Simulator import SimLogger
+from Logging import RootLogger as Logger
 
 class Core:
     Running = 1
@@ -23,18 +23,18 @@ class Core:
         Self.IP = Parent.CodeBase
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
 
-    def NextStep(Self):
+    def Next(Self):
         if not (Self.CodeBase <= Self.IP <= Self.Max_Inst_Address):
-            SimLogger.error("Invalid IP Address [%s] on Core [%s]" %(
+            Logger.error("Invalid IP Address [%s] on Core [%s]" %(
                 Self.IP, Self.CoreID))
         I = Self.Lookup_Instruction(Self.IP)
         if I:
             Result, OldValue = I.ExecOn(Self.Executor)
-            Self.Executor.Inc_IP()
-            SimLogger.traceInst(I, Result, OldValue)
+            #IP will be adjusted by the instruction
+            #Logger.traceInst(I, Result, OldValue)
             return 0
         else:
-            SimLogger.error('Attempt to execute an invlaid IP %s' %(Self.IP))
+            Logger.error('Attempt to execute an invlaid IP %s' %(Self.IP))
             return -1
         if Self.IP == Self.Max_Inst_Address + 4:
             Self.Status = Self.Idling
@@ -55,9 +55,9 @@ class InstExecutor:
         if RegNum in Self.Core.Regs :
             return Core.Regs[RegNum]
         if RegNum == 'HiLo' :
-            SimLogger.warning('HiLo read before defined')
+            Logger.warning('HiLo read before defined')
             return 0, 0
-        SimLogger.warning('$%02i read before defined' % RegNum)
+        Logger.warning('$%02i read before defined' % RegNum)
         return 0
 
     def Write_Reg(Self, RegNum, Value) :
@@ -65,7 +65,7 @@ class InstExecutor:
         for the trace. A warning message is printed if a write to register zero
         is attempted. """
         if RegNum == 0 :
-            SimLogger.error('$00 cannot be modified')
+            Logger.error('$00 cannot be modified')
             return 0
         if RegNum in Self.Core.Regs :
             OldValue = Self.Core.Regs[RegNum]
@@ -86,17 +86,17 @@ class InstExecutor:
         """ This routine returns a value from memory; a warning message is printed
         if the memory location has not been initialized. """
         if Address < 0 :
-            SimLogger.warning('%i is a negative address' % (Address))
+            Logger.warning('%i is a negative address' % (Address))
         if Address in Self.Core.Mem :
             return Self.Core.Mem[Address]
-        SimLogger.warning('mem[%04i] read before defined' % (Address))
+        Logger.warning('mem[%04i] read before defined' % (Address))
         return 0
 
     def Write_Mem(Self, Address, Value) :
         """ This routine writes a value to memory. The replaced value is returned
         for the trace. """
         if Address < 0 :
-            SimLogger.warning('%i is a negative address' % (Address))
+            Logger.warning('%i is a negative address' % (Address))
         if Address in Self.Core.Mem :
             OldValue = Self.Core.Mem[Address]
         else :

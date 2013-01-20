@@ -9,14 +9,13 @@ from random import seed
 from Opcodes import *
 from Instructions import *
 from Core import *
-from ParseUtils import *
 from ExecArbitrator import *
+from Logging import *
 
 class Simulation :
     def __init__(Self, Parent=None) :
         Self.Parent = Parent
         Self.Instructions = []
-        Self.Symbols = {}
         Self.DataLabels = []  # cached for the benefit of the control flow analyzer
         Self.CodeBase = 1000
         Self.DataBase = Self.DataEnd = 5000 + (randint(0,250) * 4)
@@ -53,152 +52,6 @@ class Simulation :
     def Stack_Address(Self, Address) :
         """ Returns True if StackBase <= Address <= StartingSP, otherwise returns False."""
         return Self.StackBase <= Address <= Self.StartingSP
-
-    def Parse_Program (Self, InputFile) :
-        """ This routine reads, tokenizes, and parses the program file. This is
-        called from the User Interface when Load command is given."""
-        Address = Self.CodeBase             # define base IP
-        LineNum = 0                         # line number (for error reports)
-        for Line in InputFile :
-            LineNum += 1
-            Tokens = Tokenize (Line)
-            if Tokens :
-                I = Self.Parse_Token_List(Tokens, Address)
-                if I == '' :
-                   Self.Print_Error("Error in line #%03i: '%s'" % (LineNum, Line[0:-1]))
-                elif not I in ['COMMENT', 'DIRECTIVE'] :
-                    Address += 4
-                    Self.Instructions.append(I)
-                    if not I.Label == '' :
-                        if Self.Symbols.has_key(I.Label) and \
-                           Self.Symbols[I.Label] <> I.Address :
-                            Self.Print_Error("Label %s is associated with address %i and %i" %  \
-                                             (I.Label, Self.Symbols[I.Label], I.Address))
-                        Self.Symbols[I.Label] = I.Address
-        Self.Error_Check_Labels()
-        Self.Assign_Op_Functions()
-
-    def Parse_Token_List (Self, Tokens, Address) :
-        """ This routine determine the instruction format from the opcode
-        and properly parses the token list.  """
-        CommentOnly = Parse_Comment(Tokens)
-        if CommentOnly <> '' :
-            return 'COMMENT'        # comment only line
-        Label = Parse_Label_Def(Tokens[0])
-        if Label <> '' :
-            Tokens = Tokens[1:]
-        if len(Tokens) == 0 :
-            Self.Print_Warning('Label-only lines not permitted')
-            return ''               # label only line (error)
-        Directive_Cmd = Parse_Directive_Cmd(Tokens[0])
-        if Directive_Cmd <> '' :
-            Self.Parse_Directive(Label, Directive_Cmd, Tokens[1:])
-            return 'DIRECTIVE'      # directive line
-        Opcode = Parse_Opcode(Tokens[0])
-        if Opcode == '' :
-            return ''
-        if Opcode in Three_Reg_Opcodes :
-            I = Three_Reg(Self, Opcode, Address)
-        elif Opcode in Two_Reg_Sex_Immd_Opcodes :
-            I = Two_Reg_Sex_Immd(Self, Opcode, Address)
-        elif Opcode in Two_Reg_Immd_Opcodes :
-            I = Two_Reg_Immd(Self, Opcode, Address)
-        elif Opcode in One_Reg_Addr_Opcodes :
-            I = One_Reg_Addr(Self, Opcode, Address)
-        elif Opcode in Two_Reg_Opcodes :
-            I = Two_Reg(Self, Opcode, Address)
-        elif Opcode in One_Reg_Opcodes :
-            I = One_Reg(Self, Opcode, Address)
-        elif Opcode in One_Reg_Immd_Opcodes :
-            I = One_Reg_Immd(Self, Opcode, Address)
-        elif Opcode in One_Label_Opcodes :
-            I = One_Label(Self, Opcode, Address)
-        elif Opcode in Two_Reg_Label_Opcodes :
-            I = Two_Reg_Label(Self, Opcode, Address)
-        elif Opcode in One_Immd_Opcodes :
-            I = One_Immd(Self, Opcode, Address)
-        else :
-            return ''
-        I.Label = Label
-        I = I.Parse(Tokens[1:])
-        return I
-
-    def Parse_Directive(Self, Label, Directive_Cmd, Tokens) :
-        """ If Directive_Cmd is .data or .text, do nothing, just doc.
-        If it's .alloc, then take next integer (must be positive),
-        multiply it by the word size and add to the current DataAddress.
-        If it's .word, then take each integer in Tokens and add
-        word size to DataAddress and initialize the word to the integer."""
-        if Directive_Cmd not in ['.text', '.data'] :
-            DataAddress = Self.DataEnd
-            if Label != '' :
-                if Self.Symbols.has_key(Label) and \
-                   Self.Symbols[Label] <> DataAddress :
-                    Self.Print_Error('Label %s is associated with address %i and %i.' % \
-                                     (Label, Self.Symbols[Label], DataAddress))
-                else :
-                    Self.DataLabels.append(Label)
-                    Self.Symbols[Label] = DataAddress
-            if Directive_Cmd == '.alloc' :
-                New_DataEnd = Self.Parse_Alloc(Tokens)
-            elif Directive_Cmd == '.word' :
-                New_DataEnd = Self.Parse_Word(Tokens)
-            else :
-                Self.Print_Warning('Unrecognized directive %s.' % (Directive_Cmd))
-                New_DataEnd = Self.DataEnd  # no change
-            Self.DataEnd = New_DataEnd
-
-    def Parse_Alloc(Self, Tokens) :
-        """ This parses a .alloc assembler directive.  Format:
-        optional_label: .alloc <int>"""
-        Num_Words = Parse_Immediate(Tokens[0])
-        Comment = Parse_Comment(Tokens[1:])
-        if (Num_Words == '') or not(Num_Words > 0) :
-            Self.Print_Error('.alloc %s must be an integer > 0' % (Num_Words))
-        elif (not Tokens[1:] == [] and Comment == ''):
-            Self.Print_Warning('text following .alloc is being ignored.')
-        else :
-            Self.DataEnd = Self.DataEnd + (Num_Words * 4) # word size
-        return Self.DataEnd
-
-    def Parse_Word(Self, Tokens) :
-        """ This parses a .word assembler directive.  Format:
-        optional_label: .word <int>, <int>,..., <int> """
-        for Token in Tokens :
-            DataValue = Parse_Immediate(Token)
-            if DataValue == '' :
-                break
-#                Self.Print_Warning('.word must be followed only by integers: %s' % (Token))
-            else :
-                Self.InitialMem[Self.DataEnd] = DataValue
-                Self.Mem[Self.DataEnd] = DataValue
-                Self.DataEnd += 4
-        return Self.DataEnd
-
-    def Error_Check_Labels(Self) :
-        """ This checks that all labels that are referenced (as
-        an immediate, branch/jump or call target) are in the symbol table
-        and if not prints an error message. """
-        References = []
-        for I in Self.Instructions :
-            try :
-                Ref = I.Immed_Label
-                if (Ref <> '') and (not Ref in References) :
-                    References.append(Ref)
-            except AttributeError :
-                try :
-                    Ref = I.Target
-                    if (Ref <> '') and (not Ref in References) :
-                        References.append(Ref)
-                except AttributeError :
-                    pass
-        SymbolList = Self.Symbols.keys()
-        for Ref in References :
-            if not Ref in SymbolList :
-                Self.Print_Error('%s is referenced, but not defined.' % Ref)
-#        for Symbol in SymbolList :
-#            if not Symbol in References and Self.Symbols[Symbol] <> Self.CodeBase :
-#                Self.Print_Warning('Label %s is defined, but never referenced.' % Symbol) 
 
     def Simulate(Self, ExeLimit=10000, WELimit=25) :
         """ This routine executes a program """
@@ -327,12 +180,6 @@ class Simulation :
             return Self.Instructions[Position]
         else :
             return None
-
-    def Assign_Op_Functions(Self) :
-        """ This routine assigned the appropriate operation function to each
-        instruction in list. """
-        for I in Self.Instructions :
-            I.Op = Op_Table.get(I.Opcode, 'undefined')
 
     def Print_Regs(Self) :
         """ This routine prints all defined registers in the register file. """
@@ -838,7 +685,7 @@ class Navigator :
 def Main (FileName='fact') :
     Sim = Simulation()
     InputFile = open('U:/scotty/classes/ece3035/Common Class Material/asm/%s.asm' % FileName, 'r')
-    Sim.Parse_Program(InputFile)
+    #Sim.Parse_Program(InputFile)
     Sim.Simulate()
     Sim.Print_Instructions()
     return Sim
@@ -846,7 +693,7 @@ def Main (FileName='fact') :
 def Program_Overlap (FileName='fact') :
     Sim = Simulation()
     InputFile = open('U:/scotty/classes/ece3035/Common Class Material/asm/%s.asm' % FileName, 'r')
-    Sim.Parse_Program(InputFile)
+    #Sim.Parse_Program(InputFile)
     for (i,j) in zip(Sim.Instructions, Sim.Instructions) :
         print i.Opcode
         print j.Opcode
