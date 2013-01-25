@@ -147,6 +147,7 @@ class Two_Reg(Instruction) :
     def ExecOn(Self, Executor) :
         if Self.Op == Div_Op and Executor.Read_Reg(Self.Src2) == 0 :
             Logger.error('Divide by zero')
+            raise RuntimeError('Divide by zero')
         Result = Self.Op(Executor.Read_Reg(Self.Src1), Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg('HiLo', Result)
         return Result, OldValue
@@ -177,8 +178,8 @@ class One_Reg_CoreID(Instruction):
             return ''
         return Self
     def ExecOn(Self, Executor):
-        Self.Write_Reg(Self.Reg, Executor.Core.CoreID)
-        return Executor.Core.CoreID
+        OldValue = Self.Write_Reg(Self.Reg, Executor.Core.CoreID)
+        return Executor.Core.CoreID, OldValue
     def Print(Self):
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -203,7 +204,6 @@ class One_Reg(Instruction) :
         return Self
     def ExecOn(Self, Executor) :
         if Self.Opcode == 'jr' :
-            Executor.Jmpto_IP(Executor.Read_Reg(Self.Reg) - 4)
             return None, None
         elif Self.Opcode == 'mfhi' :
             Result = Executor.Read_Reg('HiLo')[0]
@@ -211,6 +211,11 @@ class One_Reg(Instruction) :
             Result = Executor.Read_Reg('HiLo')[1]
         OldValue = Executor.Write_Reg(Self.Reg, Result)
         return Result, OldValue
+    def Adjust_IP(Self, Executor):
+        if Self.Opcode == 'jr' :
+            Executor.Jmpto_IP(Executor.Read_Reg(Self.Reg))
+        else:
+            super.Adjust_IP(Executor);
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -242,6 +247,7 @@ class Two_Reg_Sex_Immd(Instruction) :
         else :
             #should never be here
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+            raise SyntaxError('no immediate')
         Self.Comment = Parser.Parse_Comment(Tokens[3:])
         if Self.Dest == '' or Self.Src1 == '' or Self.RefTarget.Alias == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
@@ -269,7 +275,7 @@ class Two_Reg_Sex_Immd(Instruction) :
                 ('Immd', '%s' % (Self.RefTarget.Print())),
                 ('Comment', ' %s' % (Self.Comment)))
 
-class Two_Reg_Immd(Instruction) :
+class Two_Reg_Immd(Instruction):
     def Parse(Self, Tokens, Parser) :
         if len(Tokens) < 3 :
             return ''
@@ -285,6 +291,7 @@ class Two_Reg_Immd(Instruction) :
             Self.RefTarget.Alias = Label #will be solved later
         else :
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+            raise SyntaxError('no immediate')
         Self.Comment = Parser.Parse_Comment(Tokens[3:])
         if Self.Dest == '' or Self.Src1 == '' or Self.RefTarget.Alias == '' or \
            (not Tokens[3:] == [] and Self.Comment == '') :
@@ -329,6 +336,7 @@ class Two_Reg_Label(Instruction) :
         else :
             #should never be here
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+            raise SyntaxError('no immediate')
         Self.Comment = Parser.Parse_Comment(Tokens[3:])
         if Self.Src1 == '' or Self.Src2 == '' or \
            Self.RefTarget.Alias == '' or \
@@ -336,14 +344,15 @@ class Two_Reg_Label(Instruction) :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        Predicate = Self.Read_Reg(Self.Src1) == Self.Read_Reg(Self.Src2)
+        Self.Predicate = Self.Read_Reg(Self.Src1) == Self.Read_Reg(Self.Src2)
         if Self.Opcode == 'bne' :
-            Predicate = Predicate ^ 1
-        if Predicate :
+            Self.Predicate = Predicate ^ 1
+        return None, None
+    def Adjust_IP(Self):
+        if Self.Predicate :
             Executor.Jmpto_IP(Self.RefTarget.Value)
         else :
-            Instruction.Adjust_IP(Self, Executor)
-        return None, None
+            super.Adjust_IP(Executor)
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Src1),
@@ -409,6 +418,7 @@ class One_Reg_Addr(Instruction) :
             Self.RefTarget.Alias = Label #will be solved later
         else :
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
+            raise SyntaxError('no immediate')
         Self.Comment = Parser.Parse_Comment(Tokens[2:])
         if Self.Data == '' or Self.RefTarget.Alias == '' or Self.Reg == '' or \
            (not Tokens[2:] == [] and Self.Comment == '') :
@@ -420,37 +430,39 @@ class One_Reg_Addr(Instruction) :
             Self.Src1 = Self.Data
             Self.Src2 = Self.Reg
         return Self
-    def ExecOn(Self, Parser) :
-        Address = Self.Read_Reg(Self.Reg) + Self.RefTarget.Value
+    def ExecOn(Self, Executor) :
+        Address = Executor.Read_Reg(Self.Reg) + Self.RefTarget.Value
         if Self.Opcode in ('lb', 'lbu') :   # lb, lbu instructions
             Shift = 8 * (Address % 4)
             Address &= -4
-            Result = Self.Read_Mem(Address)
+            Result = Executor.Read_Mem(Address)
             Result >>= Shift
             Result &= 255
             if Self.Opcode == 'lb' :
                 Result = (Result + 128) % 256 - 128
-            OldValue = Self.Write_Reg(Self.Data, Result)
+            OldValue = Executor.Write_Reg(Self.Data, Result)
             return Result, OldValue
         if Self.Opcode == 'sb' :            # sb instruction
             Shift = 8 * (Address % 4)
             Address &=  -4
-            OldValue = Self.Read_Mem(Address)
-            NewByte = Self.Read_Reg(Self.Data) % 256
+            OldValue = Executor.Read_Mem(Address)
+            NewByte = Executor.Read_Reg(Self.Data) % 256
             Result = (OldValue & ((255 << Shift) ^ -1)) | NewByte << Shift
             Result = int((Result + 2**31) % 2**32 - 2**31)
-            OldValue = Self.Write_Mem(Address, Result)
+            OldValue = Executor.Write_Mem(Address, Result)
             return Result, OldValue
         if Address % 4 <> 0 :
             Logger.error('Effective Address = %d; memory addresses must be word aligned' % (Address))
+            raise SyntaxError('Memory addresses must be word aligned: %d', 
+                              %(Address))
             Address &= -4
         if Self.Opcode == 'lw' :        # lw instruction
-            Result = Self.Read_Mem(Address)
-            OldValue = Self.Write_Reg(Self.Data, Result)
+            Result = Executor.Read_Mem(Address)
+            OldValue = Executor.Write_Reg(Self.Data, Result)
             return Result, OldValue
         elif Self.Opcode == 'sw' :      # sw instruction
-            Result = Self.Read_Reg(Self.Data)
-            OldValue = Self.Write_Mem(Address, Result)
+            Result = Executor.Read_Reg(Self.Data)
+            OldValue = Executor.Write_Mem(Address, Result)
             return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
@@ -485,13 +497,14 @@ class One_Label(Instruction) :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        Executor.Jmpto_IP(Self.RefTarget.Value)
         if Self.Opcode == 'j' :         # j instruction
             return None, None
         elif Self.Opcode == 'jal' :     # jal instruction
             Result = Executor.Core.IP + 4
-            OldValue = Self.Write_Reg(31, Result)
+            OldValue = Executor.Write_Reg(31, Result)
             return Result, OldValue
+    def Adjust_IP(Self, Executor):
+        Executor.Jmpto_IP(Self.RefTarget.Value)
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.RefTarget.Print(),
@@ -514,11 +527,12 @@ class One_Immd(Instruction) :
         if Self.Src1 == '' or (Tokens[1:] <> [] and Self.Comment == '') :
             return ''
         return Self
-    def Exec(Self) :                    # swi instruction
-        if Self.Sim.Handler.Known_Interrupt(Self.Src1) :
-            return Self.Sim.Handler.Call(Self.Src1)
+    def ExecOn(Self, Executor) :                    # swi instruction
+        if Executor.Known_Interrupt(Self.Src1) :
+            return Executor.Handle_Interrupt(Self.Src1)
         else :
             Logger.error('%i is an undefined software interrupt.' % (Self.Src1))
+            raise RuntimeError('undefined software interrupt.')
             return {}, {}
     def Print(Self) :
         return '%4i %s %-5s %i                %s' % \

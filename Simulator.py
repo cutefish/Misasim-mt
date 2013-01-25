@@ -2,20 +2,21 @@
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
 
-from Analyzer import *
-from Support import *
 from os import listdir
 from random import seed
+from copy import copy
+
+from Analyzer import *
+from Support import *
 from Opcodes import *
 from Instructions import *
 from Core import *
 from ExecArbitrator import *
-from Logging import *
+from Logging import RootLogger as Logger
 
 class Simulation :
     def __init__(Self, Parent=None) :
         Self.Parent = Parent
-        Self.Instructions = []
         Self.DataLabels = []  # cached for the benefit of the control flow analyzer
         Self.CodeBase = 1000
         Self.DataBase = Self.DataEnd = 5000 + (randint(0,250) * 4)
@@ -31,6 +32,7 @@ class Simulation :
         for CoreID in range(Parent.NumCores):
             Self.Cores.append(Core(CoreID, Self))
         Self.Arbitrator = DefaultArbitrator()
+        Self.InstructionsLoaded = False
 
     def Restart(Self) :
         """ This routine restores the simulation to the pre-execution state. """
@@ -53,33 +55,40 @@ class Simulation :
         """ Returns True if StackBase <= Address <= StartingSP, otherwise returns False."""
         return Self.StackBase <= Address <= Self.StartingSP
 
+    def Load_Program(Self, InputFileStream):
+        Parser = InstParser()
+        Parser.Parse_Program(InputFileStream, Self.CodeBase)
+        for (Core in Self.Cores):
+            Core.Instructions = Parser.Instructions
+        Self.InstructionsLoaded = True
+
     def Simulate(Self, ExeLimit=10000, WELimit=25) :
         """ This routine executes a program """
-        if not Self.Instructions :
-            Self.Print_Error('No instructions found')
-        else :
-            Max_Inst_Address = Self.Instructions[-1].Address
-            while ExeLimit > 0 and Self.WECount < WELimit and Self.CodeBase <= Self.IP <= Max_Inst_Address:
-                I = Self.Lookup_Instruction(Self.IP)
-                if I :
-                    Result, OldValue = I.Exec()
-                    I.Adjust_IP()
-                    I.Log_In_Trace(Result, OldValue)
-                    ExeLimit -= 1
-                else :
-                    Self.Print_Error('Attempt to execute an invalid IP %s' % (Self.IP))
-                    break
-            if ExeLimit <= 0 :
-                Self.Print_Warning('Stopped after %i instructions.  Infinite Loop?' % (len(Self.Trace)))
-            elif Self.WECount >= WELimit :
-                Self.Print_Warning('Stopped after %i instructions.  Too many warnings and errors' % (len(Self.Trace)))
-            elif I.Opcode <> 'jr' :
-                Self.Print_Warning('Last executed instruction is %s rather than jr' % (I.Opcode))
-            elif not I.Src1 in Self.Regs or Self.Regs[I.Src1] <> Self.ReturnIP :
-                Self.Print_Warning('return address not preserved (%d versus %d)' % (Self.Regs[I.Src1], Self.ReturnIP))
-            elif Self.Regs[29] <> Self.StartingSP :
-                Self.Print_Warning('stack not maintained during execution (%d versus %d)' % (Self.Regs[29], Self.StartingSP))
-        return Self.WECount
+        if not Self.InstructionsLoaded :
+            Logger.error('Instructions not loaded')
+            return
+
+        #make a shallow copy of the cores
+        RunningCores = copy(Self.Cores)
+        while ExeLimit > 0 and len(RuningCores) > 0:
+            Core = Self.Arbitrator.select(RunningCores)
+            Core.Next()
+            if Core.Stopped():
+                RunningCores.remove(Core)
+            ExeLimit -= 1
+
+        if ExeLimit <= 0 :
+            Self.Print_Warning('Stopped after %i instructions.  Infinite Loop?' % (len(Self.Trace)))
+        #To do: check core status
+        #elif Self.WECount >= WELimit :
+        #    Self.Print_Warning('Stopped after %i instructions.  Too many warnings and errors' % (len(Self.Trace)))
+        #elif I.Opcode <> 'jr' :
+        #    Self.Print_Warning('Last executed instruction is %s rather than jr' % (I.Opcode))
+        #elif not I.Src1 in Self.Regs or Self.Regs[I.Src1] <> Self.ReturnIP :
+        #    Self.Print_Warning('return address not preserved (%d versus %d)' % (Self.Regs[I.Src1], Self.ReturnIP))
+        #elif Self.Regs[29] <> Self.StartingSP :
+        #    Self.Print_Warning('stack not maintained during execution (%d versus %d)' % (Self.Regs[29], Self.StartingSP))
+        return 0
 
     def Print_Exe_Stats(Self, Data=None) :
         """ This routine prints execution statistics. """
@@ -157,29 +166,6 @@ class Simulation :
                 Self.Parent.Print_Error(String)
             else :
                 print "Error: %s\n" % String
-
-    def Lookup_Instruction_Position(Self, Address) :
-        """ This routine looks up an instruction position using an address. First an index
-        is computing into the instruction list. If the instruction does not match, all
-        instructions are searched. """
-        Position = (Address - Self.CodeBase) / 4
-        if Position >= 0 and Position < len(Self.Instructions) :
-            if Self.Instructions[Position].Address == Address :
-                return Position
-            for Position in range(len(Self.Instructions)) :
-                I = Self.Instructions[Position]
-                if I.Address == Address :
-                    return Position
-        Self.Print_Error('%s is an invalid instruction address' % Address)
-        return ''
-
-    def Lookup_Instruction(Self, Address) :
-        """ This routine looks up an instruction using an address. """
-        Position = Self.Lookup_Instruction_Position(Address)
-        if not Position == '':
-            return Self.Instructions[Position]
-        else :
-            return None
 
     def Print_Regs(Self) :
         """ This routine prints all defined registers in the register file. """

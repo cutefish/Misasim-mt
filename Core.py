@@ -5,14 +5,15 @@ from Logging import RootLogger as Logger
 
 class Core:
     Running = 1
-    Idling = 2
+    Done = 2
+    Error = 3
     
     def __init__(Self, CoreID, Parent):
         Self.Regs = {0:0, 29:Parent.StratingSP, 31:Parent.ReturnIP}
         Self.CoreID = CoreID
         Self.CodeBase = Parent.CodeBase
+        Self.Instructions = None
         Self.IP = 0
-        Self.Instructions = Parent.Instructions
         Self.Executor = InstExecutor(Self, Parent)
         Self.Mem = Parent.Mem #should be a memory agent, simplified here.
         Self.Max_Inst_Address = Self.Instructions[-1].Address
@@ -27,17 +28,55 @@ class Core:
         if not (Self.CodeBase <= Self.IP <= Self.Max_Inst_Address):
             Logger.error("Invalid IP Address [%s] on Core [%s]" %(
                 Self.IP, Self.CoreID))
+            Self.Status = Self.Error
+            return
         I = Self.Lookup_Instruction(Self.IP)
         if I:
-            Result, OldValue = I.ExecOn(Self.Executor)
-            #IP will be adjusted by the instruction
-            #Logger.traceInst(I, Result, OldValue)
-            return 0
+            try:
+                Result, OldValue = I.ExecOn(Self.Executor)
+                I.Adjust_IP(Self.Executor)
+                #Logger.traceInst(I, Result, OldValue)
+            except RuntimeError:
+                Self.Status = Self.Error
+                return
         else:
             Logger.error('Attempt to execute an invlaid IP %s' %(Self.IP))
-            return -1
+            Self.Status = Self.Error
+            return
         if Self.IP == Self.Max_Inst_Address + 4:
-            Self.Status = Self.Idling
+            Self.Status = Self.Done
+
+    def Stopped(Self):
+        return Self.Status != Self.Running
+
+    def Done(Self):
+        return Self.Status == Self.Done
+
+    def HasError(Self):
+        return Self.Status == Self.Error
+
+    def Lookup_Instruction(Self, Address) :
+        """ This routine looks up an instruction using an address. """
+        Position = Self.Lookup_Instruction_Position(Address)
+        if not Position == '':
+            return Self.Instructions[Position]
+        else :
+            return None
+
+    def Lookup_Instruction_Position(Self, Address) :
+        """ This routine looks up an instruction position using an address. First an index
+        is computing into the instruction list. If the instruction does not match, all
+        instructions are searched. """
+        Position = (Address - Self.CodeBase) / 4
+        if Position >= 0 and Position < len(Self.Instructions) :
+            if Self.Instructions[Position].Address == Address :
+                return Position
+            for Position in range(len(Self.Instructions)) :
+                I = Self.Instructions[Position]
+                if I.Address == Address :
+                    return Position
+        Self.Print_Error('%s is an invalid instruction address' % Address)
+        return ''
 
 class InstExecutor:
     def __init__(Self, Core):
@@ -55,9 +94,9 @@ class InstExecutor:
         if RegNum in Self.Core.Regs :
             return Core.Regs[RegNum]
         if RegNum == 'HiLo' :
-            Logger.warning('HiLo read before defined')
+            Logger.warn('HiLo read before defined')
             return 0, 0
-        Logger.warning('$%02i read before defined' % RegNum)
+        Logger.warn('$%02i read before defined' % RegNum)
         return 0
 
     def Write_Reg(Self, RegNum, Value) :
@@ -66,6 +105,7 @@ class InstExecutor:
         is attempted. """
         if RegNum == 0 :
             Logger.error('$00 cannot be modified')
+            raise RuntimeError('$00 cannot be modified')
             return 0
         if RegNum in Self.Core.Regs :
             OldValue = Self.Core.Regs[RegNum]
@@ -86,17 +126,19 @@ class InstExecutor:
         """ This routine returns a value from memory; a warning message is printed
         if the memory location has not been initialized. """
         if Address < 0 :
-            Logger.warning('%i is a negative address' % (Address))
+            Logger.error('%i is a negative address' % (Address))
+            raise RuntimeError('Segmentation fault')
         if Address in Self.Core.Mem :
             return Self.Core.Mem[Address]
-        Logger.warning('mem[%04i] read before defined' % (Address))
+        Logger.warn('mem[%04i] read before defined' % (Address))
         return 0
 
     def Write_Mem(Self, Address, Value) :
         """ This routine writes a value to memory. The replaced value is returned
         for the trace. """
         if Address < 0 :
-            Logger.warning('%i is a negative address' % (Address))
+            Logger.error('%i is a negative address' % (Address))
+            raise RuntimeError('Segmentation fault')
         if Address in Self.Core.Mem :
             OldValue = Self.Core.Mem[Address]
         else :
@@ -111,6 +153,13 @@ class InstExecutor:
             del Self.Core.Mem[Address]
         else :
             Self.Core.Mem[Address] = OldValue
+
+    def Handle_Interrupt(Self, Interrupt):
+        """ This routine handles interrupt."""
+        raise NotImplementedError("cannot handle interrupt now");
+
+    def Known_Interrupt(Self, Interrupt):
+        raise NotImplementedError("cannot handle interrupt now");
 
 
 

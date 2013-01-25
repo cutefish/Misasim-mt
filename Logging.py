@@ -2,7 +2,7 @@ class Logger:
     def __init__(Self):
         pass
 
-    def warning(Self, Msg):
+    def warn(Self, Msg):
         print Msg
 
     def error(Self, Msg):

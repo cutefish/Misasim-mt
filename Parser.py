@@ -151,7 +151,7 @@ class InstParser:
         if Label <> '' :
             Tokens = Tokens[1:]
         if len(Tokens) == 0 :
-            Logger.warning('Label-only lines not permitted')
+            Logger.warn('Label-only lines not permitted')
             return ''               # label only line (error)
         Directive_Cmd = Self.Parse_Directive_Cmd(Tokens[0])
         if Directive_Cmd <> '' :
@@ -209,7 +209,7 @@ class InstParser:
             elif Directive_Cmd == '.word' :
                 New_DataEnd = Self.Parse_Word(Tokens)
             else :
-                Logger.warning('Unrecognized directive %s.' % (Directive_Cmd))
+                Logger.warn('Unrecognized directive %s.' % (Directive_Cmd))
                 New_DataEnd = Self.DataEnd  # no change
             Self.DataEnd = New_DataEnd
 
@@ -221,7 +221,7 @@ class InstParser:
         if (Num_Words == '') or not(Num_Words > 0) :
             Logger.error('.alloc %s must be an integer > 0' % (Num_Words))
         elif (not Tokens[1:] == [] and Comment == ''):
-            Logger.warning('text following .alloc is being ignored.')
+            Logger.warn('text following .alloc is being ignored.')
         else :
             Self.DataEnd = Self.DataEnd + (Num_Words * 4) # word size
         return Self.DataEnd
