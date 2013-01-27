@@ -4,7 +4,7 @@ MIPS_Opcodes = ['add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
                 'or', 'andi', 'ori', 'nor', 'xor', 'xori', 'sll', 'sllv', \
                 'srl', 'srlv', 'sra', 'srav', 'lw', 'sw', 'lb', 'lbu', 'sb', \
                 'lui', 'beq', 'bne', 'slt', 'slti', 'sltu', 'sltui', 'j', \
-                'jr', 'jal', 'swi', 'cid']
+                'jr', 'jal', 'swi', 'cid', 'nc']
 
 Directives = ['.data', '.text', '.alloc', '.word']
 
@@ -36,6 +36,7 @@ One_Immd_Opcodes = ['swi']
 #injecting context switch code, we mimic it using a static one on one
 #assignement of threads to core.
 One_Reg_CoreID_Opcodes = ['cid']
+One_Reg_NumCores_Opcodes = ['nc']
 
 
 Opcode_Classes = {'Arith' : ('add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
@@ -48,7 +49,7 @@ Opcode_Classes = {'Arith' : ('add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
                   'Load' :  ('lw', 'lb', 'lbu'),
                   'Store' : ('sw', 'sb'),
                   'Xfer' : ('mfhi', 'mflo', 'lui'),
-                  'MT' : ('cid'),
+                  'MT' : ('cid', 'nc'),
                  }
 
 

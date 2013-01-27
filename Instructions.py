@@ -1,5 +1,6 @@
 
 from Logging import RootLogger as Logger
+from Opcodes import *
 from Parser import *
 
 class Instruction :
@@ -178,8 +179,29 @@ class One_Reg_CoreID(Instruction):
             return ''
         return Self
     def ExecOn(Self, Executor):
-        OldValue = Self.Write_Reg(Self.Reg, Executor.Core.CoreID)
+        OldValue = Executor.Write_Reg(Self.Reg, Executor.Core.CoreID)
         return Executor.Core.CoreID, OldValue
+    def Print(Self):
+        return Self.Format(Self.Address, Self.Label, Self.Opcode,
+                           Self.Print_Reg(Self.Reg),
+                           '','',
+                           Self.Comment)
+    def Tagged_Print(Self):
+        return (('Address', '%4i' %(Self.Address)),
+                ('Reg', '$%02i' %(Self.Reg)))
+
+class One_Reg_NumCores(Instruction):
+    def Parse(Self, Tokens, Parser):
+        if len(Tokens) < 1: 
+            return ''
+        Self.Reg = Parser.Parse_Register(Tokens[0])
+        Self.Comment = Parser.Parse_Comment(Tokens[1:])
+        if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
+            return ''
+        return Self
+    def ExecOn(Self, Executor):
+        OldValue = Executor.Write_Reg(Self.Reg, Executor.Core.NumCores)
+        return Executor.Core.NumCores, OldValue
     def Print(Self):
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -215,7 +237,7 @@ class One_Reg(Instruction) :
         if Self.Opcode == 'jr' :
             Executor.Jmpto_IP(Executor.Read_Reg(Self.Reg))
         else:
-            super.Adjust_IP(Executor);
+            Instruction.Adjust_IP(Self, Executor);
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -242,7 +264,7 @@ class Two_Reg_Sex_Immd(Instruction) :
             Self.RefTarget.Value = (Immd + 32768) % 65536 - 32768
             Self.RefTarget.Alias = 'immd'
             Self.RefTarget.Solved = True
-        elif Label :
+        elif Label <> '':
             Self.RefTarget.Alias = Label #will be solved later
         else :
             #should never be here
@@ -283,11 +305,11 @@ class Two_Reg_Immd(Instruction):
         Self.Src1 = Parser.Parse_Register(Tokens[1])
         Self.RefTarget = Reference()
         Label,  Immd = Parser.Parse_Label_or_Immediate(Tokens[2])
-        if Immd:
+        if Immd <> '':
             Self.RefTarget.Value = Immd
             Self.RefTarget.Alias = 'immd'
             Self.RefTarget.Solved = True
-        elif Label:
+        elif Label <> '':
             Self.RefTarget.Alias = Label #will be solved later
         else :
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
@@ -331,7 +353,7 @@ class Two_Reg_Label(Instruction) :
             Self.RefTarget.Value = Self.Address + Immd * 4
             Self.RefTarget.Alias = 'immd'
             Self.RefTarget.Solved = True
-        elif Label :
+        elif Label <> '':
             Self.RefTarget.Alias = Label #will be solved later
         else :
             #should never be here
@@ -344,15 +366,16 @@ class Two_Reg_Label(Instruction) :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        Self.Predicate = Self.Read_Reg(Self.Src1) == Self.Read_Reg(Self.Src2)
+        Self.Predicate = (Executor.Read_Reg(Self.Src1) 
+                          == Executor.Read_Reg(Self.Src2))
         if Self.Opcode == 'bne' :
-            Self.Predicate = Predicate ^ 1
+            Self.Predicate = Self.Predicate ^ 1
         return None, None
-    def Adjust_IP(Self):
+    def Adjust_IP(Self, Executor):
         if Self.Predicate :
             Executor.Jmpto_IP(Self.RefTarget.Value)
         else :
-            super.Adjust_IP(Executor)
+            Instruction.Adjust_IP(Self, Executor)
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Src1),
@@ -410,11 +433,11 @@ class One_Reg_Addr(Instruction) :
         Offset, Self.Reg = Parser.Parse_Address(Tokens[1])
         Self.RefTarget = Reference()
         Label,  Immd = Parser.Parse_Label_or_Immediate(Offset)
-        if Immd:
+        if Immd <> '':
             Self.RefTarget.Value = Immd
             Self.RefTarget.Alias = 'immd'
             Self.RefTarget.Solved = True
-        if Label :
+        elif Label <> '':
             Self.RefTarget.Alias = Label #will be solved later
         else :
             Logger.error('Syntax error: %s, no immediate.' %(Tokens))
@@ -452,9 +475,11 @@ class One_Reg_Addr(Instruction) :
             OldValue = Executor.Write_Mem(Address, Result)
             return Result, OldValue
         if Address % 4 <> 0 :
-            Logger.error('Effective Address = %d; memory addresses must be word aligned' % (Address))
-            raise SyntaxError('Memory addresses must be word aligned: %d', 
-                              %(Address))
+            Logger.error(
+                'Effective Address = %d; '
+                'memory addresses must be word aligned' % (Address))
+            raise SyntaxError(
+                'Memory addresses must be word aligned: %d' %(Address))
             Address &= -4
         if Self.Opcode == 'lw' :        # lw instruction
             Result = Executor.Read_Mem(Address)

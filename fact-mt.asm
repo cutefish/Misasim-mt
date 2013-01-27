@@ -2,7 +2,6 @@
 # result is returned in $2.
 # $1: n
 # $2: running product (output n!)
-Init:   cid   $8
 Fact:   addi  $1, $0, 5         # input: n = 5
         addi  $2, $0, 1         # initialize output to 1
 Loop:   slti  $3, $1, 2         # if input is less than 2

@@ -6,7 +6,9 @@
 
 from Instructions import *
 from Opcodes import *
-from Logging import RootLogger as Logger
+from Logging import LogFactory
+
+Logger = LogFactory.getLogger('Parser')
 
 class InstParser:
     def __init__(Self):
@@ -182,6 +184,8 @@ class InstParser:
             I = One_Immd(Opcode, Address)
         elif Opcode in One_Reg_CoreID_Opcodes:
             I = One_Reg_CoreID(Opcode, Address)
+        elif Opcode in One_Reg_NumCores_Opcodes:
+            I = One_Reg_NumCores(Opcode, Address)
         else :
             return ''
         I.Label = Label
@@ -278,17 +282,33 @@ class InstParser:
                 I = Self.Parse_Token_List(Tokens, Address)
                 if I == '' :
                    Logger.error("Error in line #%03i: '%s'" % (LineNum, Line[0:-1]))
+                   raise SyntaxError("Error in line #%03i: '%s'" % (
+                       LineNum, Line[0:-1]))
                 elif not I in ['COMMENT', 'DIRECTIVE'] :
                     Address += 4
                     Self.Instructions.append(I)
                     if not I.Label == '' :
                         if Self.Symbols.has_key(I.Label) and \
                            Self.Symbols[I.Label] <> I.Address :
-                            Logger.error("Label %s is associated with address %i and %i" %  \
-                                             (I.Label, Self.Symbols[I.Label], I.Address))
+                            Logger.error(
+                                "Label %s is associated with address %i and %i" 
+                                % (I.Label, Self.Symbols[I.Label], I.Address))
                         Self.Symbols[I.Label] = I.Address
         Self.Solve_Labels()
         Self.Assign_Op_Functions()
+
+    def Report_Cores_State(Self):
+        Ret = ''
+        for Core in Self.Cores:
+            Ret += str(Core)
+            Ret += '\n'
+        return Ret
+
+    def Report_Mem_State(Self):
+        Ret = ''
+        Ret += Self.Mem
+        return Ret
+
 
 def Main(FileName='fact-mt'):
     InputFile = open('%s.asm' %FileName, 'r')

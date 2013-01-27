@@ -1,9 +1,9 @@
 import random
 
 class DefaultArbitrator:
-    def __init__(self):
+    def __init__(Self):
         random.seed()
 
-    def select(Cores):
+    def select(Self, Cores):
         return Cores[random.randrange(len(Cores))]
 

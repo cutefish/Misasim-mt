@@ -1,27 +1,40 @@
-#MiSaSim-mt Core
-#Written by Xiao Yu
+# MiSaSiM MIPS ISA Simulator
+# Written by Linda and Scott Wills
+# (c) 2004-2012 Scott & Linda Wills
 
-from Logging import RootLogger as Logger
+# Modified by Xiao Yu
+
+from Logging import LogFactory
+
+Logger = LogFactory.getLogger('Core')
 
 class Core:
-    Running = 1
-    Done = 2
-    Error = 3
+    Running = 0
+    Done = 1
+    Error = 2
+    STATUS_STRINGS = ['Running', 'Done', 'Error']
     
-    def __init__(Self, CoreID, Parent):
-        Self.Regs = {0:0, 29:Parent.StratingSP, 31:Parent.ReturnIP}
+    def __init__(Self, CoreID, Sim):
+        Self.StartingSP = Sim.StartingSP
+        Self.ReturnIP = Sim.ReturnIP
+        Self.NumCores = Sim.NumCores
+        Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
         Self.CoreID = CoreID
-        Self.CodeBase = Parent.CodeBase
+        Self.CodeBase = Sim.CodeBase
+        Self.Profiler = Sim.Profiler
         Self.Instructions = None
         Self.IP = 0
-        Self.Executor = InstExecutor(Self, Parent)
-        Self.Mem = Parent.Mem #should be a memory agent, simplified here.
-        Self.Max_Inst_Address = Self.Instructions[-1].Address
+        Self.Executor = InstExecutor(Self)
+        Self.Mem = Sim.Mem #should be a memory agent, simplified here.
+        Self.Max_Inst_Address = Self.CodeBase
         Self.Status = Self.Running
 
+    def Load_Instructions(Self, Instructions):
+        Self.Instructions = Instructions
+        Self.Max_Inst_Address = Self.Instructions[-1].Address
 
     def Restart(Self):
-        Self.IP = Parent.CodeBase
+        Self.IP = Self.CodeBase
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
 
     def Next(Self):
@@ -35,22 +48,21 @@ class Core:
             try:
                 Result, OldValue = I.ExecOn(Self.Executor)
                 I.Adjust_IP(Self.Executor)
-                #Logger.traceInst(I, Result, OldValue)
+                Self.Profiler.Trace(Self, I, OldValue, Result)
             except RuntimeError:
                 Self.Status = Self.Error
                 return
         else:
-            Logger.error('Attempt to execute an invlaid IP %s' %(Self.IP))
+            Logger.error("Invalid IP Address [%s] on Core [%s]" %(
+                Self.IP, Self.CoreID))
             Self.Status = Self.Error
             return
-        if Self.IP == Self.Max_Inst_Address + 4:
+        if (Self.IP == Self.Max_Inst_Address + 4 or 
+            Self.IP == Self.ReturnIP):
             Self.Status = Self.Done
 
     def Stopped(Self):
         return Self.Status != Self.Running
-
-    def Done(Self):
-        return Self.Status == Self.Done
 
     def HasError(Self):
         return Self.Status == Self.Error
@@ -78,6 +90,27 @@ class Core:
         Self.Print_Error('%s is an invalid instruction address' % Address)
         return ''
 
+    def __str__(Self):
+        Ret = 'Core('
+        Ret += 'ID: %s' %Self.CoreID
+        Ret += ' IP: %s' %Self.IP
+        Ret += ' Status: %s' %Self.STATUS_STRINGS[Self.Status]
+        Ret += ' Regs: [' 
+        for RegNum, Value in Self.Regs.items():
+            Ret += '$%s: %s' %(RegNum, Value)
+            Ret += ', '
+        Ret += ')'
+        return Ret
+
+    #def Print_Regs(Self) :
+    #    """ This routine prints all defined registers in the register file. """
+    #    if 'HiLo' in Self.Regs :
+    #        Self.Print_Message('HiLo = %i : %i' % Self.Regs['HiLo'])
+    #    for RegNum in range(32) :
+    #        if RegNum in Self.Regs :
+    #            Self.Print_Message('$%02i = %8i' % (RegNum, Self.Regs[RegNum]))
+
+
 class InstExecutor:
     def __init__(Self, Core):
         Self.Core = Core
@@ -92,11 +125,12 @@ class InstExecutor:
         """ This routine returns a register value; a warning message is printed
         if the register has not been initialized. """
         if RegNum in Self.Core.Regs :
-            return Core.Regs[RegNum]
+            return Self.Core.Regs[RegNum]
         if RegNum == 'HiLo' :
-            Logger.warn('HiLo read before defined')
+            Logger.warn('Core %s: HiLo read before defined' %Self.Core.CoreID)
             return 0, 0
-        Logger.warn('$%02i read before defined' % RegNum)
+        Logger.warn('Core %s: $%02i read before defined' %(
+            Self.Core.CoreID, RegNum))
         return 0
 
     def Write_Reg(Self, RegNum, Value) :
@@ -104,7 +138,7 @@ class InstExecutor:
         for the trace. A warning message is printed if a write to register zero
         is attempted. """
         if RegNum == 0 :
-            Logger.error('$00 cannot be modified')
+            Logger.error('Core %s; $00 cannot be modified' %Self.Core.CoreID)
             raise RuntimeError('$00 cannot be modified')
             return 0
         if RegNum in Self.Core.Regs :
@@ -126,18 +160,21 @@ class InstExecutor:
         """ This routine returns a value from memory; a warning message is printed
         if the memory location has not been initialized. """
         if Address < 0 :
-            Logger.error('%i is a negative address' % (Address))
+            Logger.error('Core %s: %i is a negative address' % (
+                Self.Core.CoreID, Address))
             raise RuntimeError('Segmentation fault')
         if Address in Self.Core.Mem :
             return Self.Core.Mem[Address]
-        Logger.warn('mem[%04i] read before defined' % (Address))
+        Logger.warn('Core %s: mem[%04i] read before defined' % (
+            Self.Core.CoreID, Address))
         return 0
 
     def Write_Mem(Self, Address, Value) :
         """ This routine writes a value to memory. The replaced value is returned
         for the trace. """
         if Address < 0 :
-            Logger.error('%i is a negative address' % (Address))
+            Logger.error('Core %s: %i is a negative address' % (
+                Self.Core.CoreID, Address))
             raise RuntimeError('Segmentation fault')
         if Address in Self.Core.Mem :
             OldValue = Self.Core.Mem[Address]
