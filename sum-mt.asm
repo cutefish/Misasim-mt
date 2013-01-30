@@ -10,6 +10,7 @@
 #  0x000C: core 1 compute sub sum
 #  0x0010: core 2 compute range start
 #  ...
+@memset 0, 24, 0                # initialize memory: 0x0000 - 0x001E 30 words
 Init:   addi  $10, $0, 100      # input: n = 100
         cid   $11               # put id in 11
         nc    $12               # put number of cores in 12
@@ -41,7 +42,7 @@ WEnd:   addi  $7, $7, 4         # increment offset
 Slave:  addi  $13,$13, 4        # shift offset to range end
 SWait:  lw    $8, 4($13)        # load range end into 8
         beq   $8, $0, SWait     # if range end is zero, jmp back
-        and   $1, $1, $0        # clear 1
+        addi  $1, $0, 0        # clear 1
         add   $1, $1, $8        # add range end into 1
         addi  $13,$13, -4       # shift offset to range start
         lw    $9, 4($13)        # load range start into 9

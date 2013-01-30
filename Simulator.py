@@ -35,6 +35,7 @@ class Simulation :
             Self.Cores.append(Core(CoreID, Self))
         Self.Arbitrator = DefaultArbitrator()
         Self.Instructions = None
+        Self.InitCommands = None
         Self.Restart()
 
     def Restart(Self) :
@@ -43,6 +44,7 @@ class Simulation :
         for Core in Self.Cores:
             Core.Restart()
         Self.Mem.clear()
+
 
     #def Goto_Start_of_Trace(Self) :
     #    """ This routine sets processor state and the navigator to the begining
@@ -62,10 +64,14 @@ class Simulation :
         for Core in Self.Cores:
             Core.Load_Instructions(Parser.Instructions)
         Self.Instructions = Parser.Instructions
+        Self.InitCommands = Parser.InitCommands
         Logger.info('Done parsing program')
 
     def Simulate(Self, ExeLimit=10000) :
         """ This routine executes a program """
+        #init first
+        Self.Init_Simulation()
+        #execute instructions
         if not Self.Instructions:
             Logger.error('Instructions not loaded')
             return
@@ -108,6 +114,12 @@ class Simulation :
             Ret += '0x%04X: %s, ' %(Addr, Value)
         Ret += '}'
         return Ret
+
+    def Init_Simulation(Self):
+        for Command, Offset, Len, Value in Self.InitCommands:
+            if Command == 'memset':
+                for Word in range(Offset, Len):
+                    Self.Mem[Word * 4] = Value
 
 def Main (FileName='fact-mt', NumCores=2) :
     class FakeUI:

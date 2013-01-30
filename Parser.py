@@ -14,6 +14,7 @@ class InstParser:
     def __init__(Self):
         Self.Symbols = {}
         Self.Instructions = []
+        Self.InitCommands = []
 
     def Tokenize (Self, Line) :
         """ This routine scans a list of space or comma delimited tokens with comments """
@@ -274,9 +275,16 @@ class InstParser:
         """ This routine reads, tokenizes, and parses the program file. This is
         called from the User Interface when Load command is given."""
         Address = CodeBase             # define base IP
-        LineNum = 0                         # line number (for error reports)
+        LineNum = 0                    # line number (for error reports)
+        Initialized = False
         for Line in InputFile :
             LineNum += 1
+            if not Initialized:
+                InitNotEnd = Self.Parse_Init(Line)
+                if InitNotEnd:
+                    continue
+                else:
+                    Initialized = True
             Tokens = Self.Tokenize (Line)
             if Tokens :
                 I = Self.Parse_Token_List(Tokens, Address)
@@ -297,17 +305,27 @@ class InstParser:
         Self.Solve_Labels()
         Self.Assign_Op_Functions()
 
-    def Report_Cores_State(Self):
-        Ret = ''
-        for Core in Self.Cores:
-            Ret += str(Core)
-            Ret += '\n'
-        return Ret
-
-    def Report_Mem_State(Self):
-        Ret = ''
-        Ret += Self.Mem
-        return Ret
+    def Parse_Init(Self, Line):
+        """This routine parses the init instructions, which in current state
+        can only be memset. The syntax is "@memset offset, len, value". This
+        routine returns True if parse succeeded, otherwise, return False."""
+        #ignore comments
+        if Line.startswith('#'):
+            return True
+        if not Line.startswith('@'):
+            return False
+        Tokens = Self.Tokenize(Line)
+        Command, Offset, Len, Value, Comment = Tokens
+        Command = Command.lstrip('@')
+        if not Command == 'memset':
+            raise SyntaxError('Init command not memset:' + Command)
+        Offset = int(Offset)
+        Len = int(Len)
+        Value = int(Value)
+        if Offset % 4 != 0:
+            raise SyntaxError('memset offset must be aligned:' + Offset)
+        Self.InitCommands.append((Command, Offset, Len, Value))
+        return True
 
 
 def Main(FileName='fact-mt'):
