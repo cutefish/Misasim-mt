@@ -9,6 +9,7 @@ from random import seed, randint
 from copy import copy
 
 from Core import *
+from Memory import *
 from ExecArbitrator import *
 from Logging import LogFactory
 from Parser import *
@@ -26,16 +27,17 @@ class Simulation :
         Self.StartingSP = 100000
         Self.ReturnIP = 3000 + (randint(0,250) * 4)
         Self.Cores = []
-        Self.Mem = {}
+        Self.Mem = Memory()
         Self.Profiler = Profiler()
         Self.NumCores = 2
         if Parent != None:
             Self.NumCores = Parent.NumCores
         for CoreID in range(Self.NumCores):
             Self.Cores.append(Core(CoreID, Self))
+        Self.Mem.AddCores(Self.Cores)
         Self.Arbitrator = DefaultArbitrator()
-        Self.Instructions = None
-        Self.InitCommands = None
+        Self.Instructions = []
+        Self.InitCommands = []
         Self.Restart()
 
     def Restart(Self) :
@@ -43,7 +45,7 @@ class Simulation :
         Self.Profiler.Clear()
         for Core in Self.Cores:
             Core.Restart()
-        Self.Mem.clear()
+        Self.Mem.Clear()
 
 
     #def Goto_Start_of_Trace(Self) :
@@ -108,20 +110,17 @@ class Simulation :
         return Ret
 
     def Report_Mem_State(Self):
-        Ret = 'Mem: \n{'
-        for Addr in sorted(Self.Mem):
-            Value = Self.Mem[Addr]
-            Ret += '0x%04X: %s, ' %(Addr, Value)
-        Ret += '}'
+        Ret = 'Mem: \n'
+        Ret += str(Self.Mem)
         return Ret
 
     def Init_Simulation(Self):
         for Command, Offset, Len, Value in Self.InitCommands:
             if Command == 'memset':
-                for Word in range(Offset, Len):
-                    Self.Mem[Word * 4] = Value
+                for Word in range(Len):
+                    Self.Mem.Set(Offset + Word * 4, Value)
 
-def Main (FileName='fact-mt', NumCores=2) :
+def Main (FileName='fact-mt', NumCores=2, ExecLimit=10000) :
     class FakeUI:
         def __init__(Self):
             Self.NumCores = NumCores
@@ -129,7 +128,7 @@ def Main (FileName='fact-mt', NumCores=2) :
     Sim = Simulation(UI)
     InputFile = open('%s.asm' % FileName, 'r')
     Sim.Load_Program(InputFile)
-    Sim.Simulate()
+    Sim.Simulate(ExecLimit)
     print Sim.Report_Cores_State()
     print Sim.Report_Mem_State()
     #print
@@ -138,7 +137,9 @@ def Main (FileName='fact-mt', NumCores=2) :
 import sys
 
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
+    if len(sys.argv) > 3:
+        Main(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
+    elif len(sys.argv) > 2:
         Main(sys.argv[1], int(sys.argv[2]))
     elif len(sys.argv) > 1:
         Main(sys.argv[1])

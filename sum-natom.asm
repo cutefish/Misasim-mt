@@ -1,8 +1,7 @@
-# This program parallelly computes the summation of n
+# This program parallelly computes the summation of sequence 1 to n
 # $10: n
 #
 # Use memory for synchronization. 
-# The simulator is promised to return 0 if memory word undefined.
 # Memory usage:
 #  0x0000: final Value
 #  0x0004: core 1 compute range start
@@ -10,7 +9,7 @@
 #  0x000C: core 1 compute sub sum
 #  0x0010: core 2 compute range start
 #  ...
-@memset 0, 24, 0                # initialize memory: 0x0000 - 0x001E 30 words
+@memset 0x0000, 24, 0           # init memory: 0x0000 - 0x005C 24 words for 8 cores
 Init:   addi  $10, $0, 100      # input: n = 100
         cid   $11               # put id in 11
         nc    $12               # put number of cores in 12

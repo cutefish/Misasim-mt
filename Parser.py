@@ -319,9 +319,9 @@ class InstParser:
         Command = Command.lstrip('@')
         if not Command == 'memset':
             raise SyntaxError('Init command not memset:' + Command)
-        Offset = int(Offset)
-        Len = int(Len)
-        Value = int(Value)
+        Offset = Self.Parse_Immediate(Offset)
+        Len = Self.Parse_Immediate(Len)
+        Value = Self.Parse_Immediate(Value)
         if Offset % 4 != 0:
             raise SyntaxError('memset offset must be aligned:' + Offset)
         Self.InitCommands.append((Command, Offset, Len, Value))

@@ -4,7 +4,7 @@ MIPS_Opcodes = ['add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
                 'or', 'andi', 'ori', 'nor', 'xor', 'xori', 'sll', 'sllv', \
                 'srl', 'srlv', 'sra', 'srav', 'lw', 'sw', 'lb', 'lbu', 'sb', \
                 'lui', 'beq', 'bne', 'slt', 'slti', 'sltu', 'sltui', 'j', \
-                'jr', 'jal', 'swi', 'cid', 'nc']
+                'jr', 'jal', 'swi', 'cid', 'nc', 'llw', 'stcw']
 
 Directives = ['.data', '.text', '.alloc', '.word']
 
@@ -21,7 +21,7 @@ One_Reg_Opcodes = ['mfhi', 'mflo', 'jr']
 
 One_Reg_Immd_Opcodes = ['lui']
 
-One_Reg_Addr_Opcodes = ['sw', 'lw', 'lb', 'lbu', 'sb']
+One_Reg_Addr_Opcodes = ['sw', 'lw', 'lb', 'lbu', 'sb', 'llw', 'stcw']
 
 One_Label_Opcodes = ['j', 'jal']
 
@@ -37,6 +37,7 @@ One_Immd_Opcodes = ['swi']
 #assignement of threads to core.
 One_Reg_CoreID_Opcodes = ['cid']
 One_Reg_NumCores_Opcodes = ['nc']
+#llw and stcw
 
 
 Opcode_Classes = {'Arith' : ('add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
@@ -46,8 +47,8 @@ Opcode_Classes = {'Arith' : ('add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
                   'Shift' : ('sll', 'sllv', 'srl', 'srlv', 'sra', 'srav'),
                   'Branch' : ('beq', 'bne'),
                   'Jump' : ('j', 'jr', 'jal', 'swi'),
-                  'Load' :  ('lw', 'lb', 'lbu'),
-                  'Store' : ('sw', 'sb'),
+                  'Load' :  ('lw', 'lb', 'lbu', 'llw'),
+                  'Store' : ('sw', 'sb', 'stcw'),
                   'Xfer' : ('mfhi', 'mflo', 'lui'),
                   'MT' : ('cid', 'nc'),
                  }

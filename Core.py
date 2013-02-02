@@ -19,13 +19,14 @@ class Core:
         Self.ReturnIP = Sim.ReturnIP
         Self.NumCores = Sim.NumCores
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
+        Self.SpecRegs = {'Res':False, 'ResAddr':None}
         Self.CoreID = CoreID
         Self.CodeBase = Sim.CodeBase
         Self.Profiler = Sim.Profiler
         Self.Instructions = None
         Self.IP = 0
         Self.Executor = InstExecutor(Self)
-        Self.Mem = Sim.Mem #should be a memory agent, simplified here.
+        Self.Mem = Sim.Mem #To do: should be a cache controller.
         Self.Max_Inst_Address = Self.CodeBase
         Self.Status = Self.Running
 
@@ -90,15 +91,27 @@ class Core:
         Self.Print_Error('%s is an invalid instruction address' % Address)
         return ''
 
+    def Clear_Mem_Reserve(Self, Address):
+        if (Self.SpecRegs['Res'] == True and
+            Self.SpecRegs['ResAddr'] == Address):
+            Self.SpecRegs['Res'] = False
+            Self.SpecRegs['ResAddr'] = None
+
     def __str__(Self):
         Ret = 'Core('
         Ret += 'ID: %s' %Self.CoreID
-        Ret += ' IP: %s' %Self.IP
-        Ret += ' Status: %s' %Self.STATUS_STRINGS[Self.Status]
-        Ret += ' Regs: [' 
+        Ret += '; IP: %s' %Self.IP
+        Ret += '; Status: %s' %Self.STATUS_STRINGS[Self.Status]
+        Ret += '; Regs: [' 
         for RegNum, Value in Self.Regs.items():
             Ret += '$%s: %s' %(RegNum, Value)
             Ret += ', '
+        Ret += ']; '
+        Ret += ' SpecialRegs: ['
+        for Name, Value in Self.SpecRegs.items():
+            Ret += '$%s: %s' %(Name, Value)
+            Ret += ', '
+        Ret += '] '
         Ret += ')'
         return Ret
 
@@ -156,40 +169,44 @@ class InstExecutor:
         else :
             Self.Core.Regs[RegNum] = OldValue
 
-    def Read_Mem(Self, Address) :
+    def Read_Mem(Self, Address, Reserve=False) :
         """ This routine returns a value from memory; a warning message is printed
         if the memory location has not been initialized. """
         if Address < 0 :
             Logger.error('Core %s: %i is a negative address' % (
                 Self.Core.CoreID, Address))
             raise RuntimeError('Segmentation fault')
-        if Address in Self.Core.Mem :
-            return Self.Core.Mem[Address]
-        Logger.warn('Core %s: mem[%04i] read before defined' % (
-            Self.Core.CoreID, Address))
-        return 0
+        if Reserve == True:
+            Self.Core.SpecRegs['Res'] = True
+            Self.Core.SpecRegs['ResAddr'] = Address
+        return Self.Core.Mem.Read(Address)
 
-    def Write_Mem(Self, Address, Value) :
+    def Write_Mem(Self, Address, Value, Reserve=False) :
         """ This routine writes a value to memory. The replaced value is returned
         for the trace. """
         if Address < 0 :
             Logger.error('Core %s: %i is a negative address' % (
                 Self.Core.CoreID, Address))
             raise RuntimeError('Segmentation fault')
-        if Address in Self.Core.Mem :
-            OldValue = Self.Core.Mem[Address]
-        else :
-            OldValue = 'undefined'
-        Self.Core.Mem[Address] = Value
-        return OldValue
+        if Reserve == True:
+            #check reserve
+            if Self.Core.SpecRegs['Res'] == False:
+                Self.Core.Regs['HiLo'] = (0, 0)
+                return Self.Core.Mem.Peek(Address)
+            if Self.Core.SpecRegs['ResAddr'] != Address:
+                Self.Core.Regs['HiLo'] = (0, 0)
+                return Self.Core.Mem.Peek(Address)
+            #still reserved
+            Self.Core.Regs['HiLo'] = (1, 1)
+        #actually write to the memory 
+        return Self.Core.Mem.Write(Address, Value)
 
     def Unwrite_Mem(Self, Address, OldValue) :
         """ This routine undoes a memory write. If the old value was undefined,
         the memory entry is removed. """
-        if OldValue == 'undefined' :
-            del Self.Core.Mem[Address]
-        else :
-            Self.Core.Mem[Address] = OldValue
+        if Self.NumCores > 1:
+            raise NotImplementedError('Unwrite_Mem not yet supported in mt mode')
+        Self.Core.Mem.Unwrite(Address, OldValue)
 
     def Handle_Interrupt(Self, Interrupt):
         """ This routine handles interrupt."""

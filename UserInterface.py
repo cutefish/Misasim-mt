@@ -9,11 +9,13 @@
 # 20 February 2011: added HiLo to register list
 # 18 March 2011:    fixed some memory leaks; repaired in update_mods
 
+import os
+import copy
+
 from Tkinter        import *
 from tkFileDialog   import *
 from tkMessageBox   import *
 from Simulator      import *
-import os
 
 appPath = os.getcwd()
 
@@ -22,9 +24,8 @@ appPath = os.getcwd()
 class MiSaSiM(Tk) :
     def __init__(Self, Version) :
         Tk.__init__(Self)
-        Self.Sim = Simulation(Self)
         Self.Version = Version
-        Self.title('MiSaSiM %.2f' % Version)
+        Self.title('MiSaSiM %.2f(mt)' % Version)
 
         # MiSaSim environment variables
         Self.ExeLimit = 500000
@@ -37,6 +38,17 @@ class MiSaSiM(Tk) :
 
         # load options parameters if options init file exists
         Self.Load_Init_File()
+
+        # init simulation
+        Self.Sim = Simulation(Self)
+
+        # current core info display
+        Self.CurrCoreID = 0
+        Self.CoreIDSetters = []
+        for CoreID in range(Self.NumCores):
+            def Setter():
+                Self.CoreIDSetter = CoreID
+            Self.CoreIDSetters.append(Setter)
 
         # make panes
         Self.MessageView = MessagePane(Self)
@@ -92,7 +104,7 @@ class MiSaSiM(Tk) :
         Self.TopHelpMenu()
         Self.config(menu=Self.menubar)
 
-        Self.MenuView.IPRefresh()
+        Self.MenuView.CoreRefresh()
 
     def TopFileMenu(Self) :
         filemenu = Menu(Self.menubar, tearoff=0, relief=RAISED)
@@ -196,13 +208,13 @@ class MiSaSiM(Tk) :
         Self.DataView.Refresh(DataAddresses)
         Self.StackView.Refresh(StackAddresses)
         Self.CodeView.Refresh()
-        Self.MenuView.IPRefresh()
+        Self.MenuView.CoreRefresh()
 
     def Clear(Self, Event=None) :
         """ This routine clears the simulator, clearing and initializing all
         views. """
         Self.Sim = Simulation(Self)
-        Self.MenuView.IPRefresh()
+        Self.MenuView.CoreRefresh()
         Self.CodeView.Refresh()
         Self.TraceView.Refresh()
         Self.MessageView.Refresh()
@@ -508,7 +520,7 @@ class MiSaSiM(Tk) :
         """ This routine processes a Mod oject returned from the Navigator.
         The direction flag Forward indicates the direction of the trace motion. """
         NewIP, NewTraceRow, RegMods, DataMods, StackMods = Mods
-        Self.MenuView.IPRefresh()
+        Self.MenuView.CoreRefresh()
         Self.TraceView.Select(NewTraceRow)
         DataAddresses, StackAddresses = Self.DataView.Collect_Sorted_Addresses()
         Self.DataView.Process_Mods(DataMods, Forward, DataAddresses)
@@ -716,7 +728,7 @@ class MenuPane(Frame) :
     def __init__(Self, Parent, relief = FLAT) :
         Frame.__init__(Self, Parent, relief = FLAT, bd=0)
         Self.BuildMenu(Parent)
-        Self.BuildIP(Parent)
+        Self.BuildCoreInfo(Parent)
 
     def BuildMenu(Self, Parent) :
         Self.IconImages = []
@@ -744,18 +756,29 @@ class MenuPane(Frame) :
                 else :
                      Button(Self, bd = 2, image = IconImage, width=50, compound = LEFT, relief = GROOVE, overrelief= RAISED, command = Command).pack(side = LEFT)
 
-    def BuildIP(Self, Parent) :
+        for CoreID in range(Parent.NumCores):
+            Button(Self, bd = 2, text = 'Core %s' %(CoreID), 
+                   relief = GROOVE, overrelief = RAISED, 
+                   command = Parent.CoreIDSetters[CoreID]).pack(side = LEFT)
+
+    def BuildCoreInfo(Self, Parent) :
         Self.IPText = StringVar()
         Self.IP = Label(Self, textvariable = Self.IPText, height=1, width=10)
         Self.IP.pack(side=RIGHT)
         Self.IP.config(font=('courier', Parent.FontSize, Parent.FontFace))
+        Self.CoreText = StringVar()
+        Self.CurrCore = Label(Self, textvariable = Self.CoreText, height=1, width=10)
+        Self.CurrCore.pack(side=RIGHT)
+        Self.CurrCore.config(font=('courier', Parent.FontSize, Parent.FontFace))
 
     def DestroyMenuIP(Self) :
         for Child in Self.children.values() :
             Child.destroy()
 
-    def IPRefresh(Self) :       
-        Self.IPText.set('IP = %i' % Self.master.Sim.IP)
+    def CoreRefresh(Self) :       
+        Self.IPText.set('IP = %i' % Self.master.Sim.Cores[0].IP)
+        Self.CoreText.set('Core = %i' % Self.master.CurrCoreID)
+
 
     def notdone(Self) :
         showerror('Not implemented', 'Not yet available')

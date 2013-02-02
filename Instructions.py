@@ -1,7 +1,9 @@
 
-from Logging import RootLogger as Logger
+from Logging import LogFactory
 from Opcodes import *
 from Parser import *
+
+Logger = LogFactory.getLogger('Instructions')
 
 class Instruction :
     def __init__(Self, Opcode, Address) :
@@ -446,10 +448,10 @@ class One_Reg_Addr(Instruction) :
         if Self.Data == '' or Self.RefTarget.Alias == '' or Self.Reg == '' or \
            (not Tokens[2:] == [] and Self.Comment == '') :
             return ''
-        if Self.Opcode in ('lw', 'lb', 'lbu') :
+        if Self.Opcode in ('lw', 'lb', 'lbu', 'llw') :
             Self.Dest = Self.Data
             Self.Src1 = Self.Reg
-        if Self.Opcode in ('sw', 'sb') :
+        if Self.Opcode in ('sw', 'sb', 'swc') :
             Self.Src1 = Self.Data
             Self.Src2 = Self.Reg
         return Self
@@ -481,13 +483,21 @@ class One_Reg_Addr(Instruction) :
             raise SyntaxError(
                 'Memory addresses must be word aligned: %d' %(Address))
             Address &= -4
-        if Self.Opcode == 'lw' :        # lw instruction
+        if Self.Opcode == 'lw':        # lw instruction
             Result = Executor.Read_Mem(Address)
             OldValue = Executor.Write_Reg(Self.Data, Result)
             return Result, OldValue
-        elif Self.Opcode == 'sw' :      # sw instruction
+        if Self.Opcode == 'sw':      # sw instruction
             Result = Executor.Read_Reg(Self.Data)
             OldValue = Executor.Write_Mem(Address, Result)
+            return Result, OldValue
+        if Self.Opcode == 'llw':
+            Result = Executor.Read_Mem(Address, True)
+            OldValue = Executor.Write_Reg(Self.Data, Result)
+            return Result, OldValue
+        if Self.Opcode == 'stcw':      # sw instruction
+            Result = Executor.Read_Reg(Self.Data)
+            OldValue = Executor.Write_Mem(Address, Result, True)
             return Result, OldValue
     def Print(Self) :
         return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
