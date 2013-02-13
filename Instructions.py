@@ -474,8 +474,8 @@ class One_Reg_Addr(Instruction) :
             NewByte = Executor.Read_Reg(Self.Data) % 256
             Result = (OldValue & ((255 << Shift) ^ -1)) | NewByte << Shift
             Result = int((Result + 2**31) % 2**32 - 2**31)
-            OldValue = Executor.Write_Mem(Address, Result)
-            return Result, OldValue
+            OldValue, NewValue = Executor.Write_Mem(Address, Result)
+            return NewValue, OldValue
         if Address % 4 <> 0 :
             Logger.error(
                 'Effective Address = %d; '
@@ -489,17 +489,17 @@ class One_Reg_Addr(Instruction) :
             return Result, OldValue
         if Self.Opcode == 'sw':      # sw instruction
             Result = Executor.Read_Reg(Self.Data)
-            OldValue = Executor.Write_Mem(Address, Result)
-            return Result, OldValue
+            OldValue NewValue = Executor.Write_Mem(Address, Result)
+            return NewValue, OldValue
         if Self.Opcode == 'llw':
             Result = Executor.Read_Mem(Address, True)
             OldValue = Executor.Write_Reg(Self.Data, Result)
             return Result, OldValue
         if Self.Opcode == 'stcw':      # sw instruction
             Result = Executor.Read_Reg(Self.Data)
-            OldValue = Executor.Write_Mem(Address, Result, True)
-            return Result, OldValue
-    def Print(Self) :
+            OldValue, NewValue = Executor.Write_Mem(Address, Result, True)
+            return NewValue, OldValue
+    def Print(Self):
         return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
                (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Data,\
                 Self.RefTarget.Print(), Self.Reg, Self.Comment)

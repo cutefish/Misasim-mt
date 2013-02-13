@@ -4,12 +4,12 @@
 
 # Modified by Xiao Yu
 
-from Analyzer import *
+from Tracer import *
 
-class Navigator :
-    def __init__(Self, Sim, Analysis = None) :
+class Navigator(Tracer):
+    def __init__(Self, Sim, Analysis=None) :
+        super(Navigator, Self).__init__()
         Self.Trace_Index = 0
-        Self.Sim = Sim
         Self.Lexical_Address = Sim.CodeBase
         Self.Analysis = Analysis
         # Navigator also may have Current_BB and Current_Loop attributes if there is an Analysis
@@ -22,6 +22,7 @@ class Navigator :
         """ This resets the lexical address and trace index to the starting state.
         It is used when we already have a trace and possibly an Analysis that we
         don't want to lose."""
+        Self.Clear()
         Self.Trace_Index = 0
         Self.Lexical_Address = Self.Sim.CodeBase
         Self.Assign_BB_Loop(Self.Sim.CodeBase)
@@ -30,7 +31,7 @@ class Navigator :
         """ This can be used after a CFA has been performed to map an existing
         Navigator state to the BB and Loop (if any) in which Lexical_Address
         occurs. """
-        Self. Analysis = Analysis
+        Self.Analysis = Analysis
         Self.Assign_BB_Loop(Self.Lexical_Address, Analysis)
 
     def Assign_BB_Loop(Self, Address, Analysis = None) :
@@ -100,10 +101,11 @@ class Navigator :
         Stack_Changes dictionary: indexed by effective addresses of stack stores; data
             is of the same type as in Mem_Changes.
         This is the core function that all the other move instructions call. """
-        New_Lexical_Address = Trace[New_Trace_Index][0].Address 
+        CoreID, CoreIP, Instruction, OldValue, NewValie = Self.Trace[New_Trace_Index]
+        New_Lexical_Address = Instruction.Address
         Old_Trace_Index = Self.Trace_Index
         Reg_Changes, Mem_Changes = \
-                     Self.Update_Storage(Old_Trace_Index, New_Trace_Index, Trace)
+                     Self.Update_Storage(Old_Trace_Index, New_Trace_Index)
         Mem_Changes, Stack_Changes = Self.Classify_Mem_Changes(Mem_Changes)
         Self.Trace_Index = New_Trace_Index
         Self.Lexical_Address = New_Lexical_Address
@@ -115,7 +117,7 @@ class Navigator :
         # else: no need to update BB info since no CFA was performed.
         return (New_Lexical_Address, New_Trace_Index, Reg_Changes, Mem_Changes, Stack_Changes)
 
-    def Update_Storage(Self, Old_Trace_Index, New_Trace_Index, Trace) :
+    def Update_Storage(Self, Old_Trace_Index, New_Trace_Index) :
         Reg_Changes = {}
         Mem_Changes = {}
         if Old_Trace_Index > New_Trace_Index :
@@ -123,9 +125,9 @@ class Navigator :
         else : Direction = 1
         while not Old_Trace_Index == New_Trace_Index :
             if Direction == 1 :
-                New_Inst, New_Value, Old_Value = Trace[Old_Trace_Index]
+                New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index]
             else :
-                New_Inst, New_Value, Old_Value = Trace[Old_Trace_Index-1]
+                New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index-1]
             Opcode = New_Inst.Opcode
             if New_Value <> None :      # New_Value is None for jumps, branches
                 if Opcode in ('sw', 'sb') :
@@ -220,7 +222,7 @@ class Navigator :
             if Self.Sim.Stack_Address(Address) :
                 Stack_Changes[Address] = Mem_Changes[Address]
                 del Mem_Changes[Address]
-        return Mem_Changes, Stack_Changes        
+        return Mem_Changes, Stack_Changes
 
     def Move_to_Top_of_BB(Self, Trace) :
         """ Move to the top of the current basic block."""
@@ -337,7 +339,7 @@ class Navigator :
         """ Move to the Instruction that most recently wrote Register or to the
         current instruction's source1 operand if Register is not provided. """
         if not Register :
-            Inst = Trace[Self.Trace_Index][0]
+            Inst = Self.Trace[Self.Trace_Index][0]
             if Inst.Has_Src1() :
                 Register = Inst.Src1
             else :
@@ -354,7 +356,7 @@ class Navigator :
         """ Move to the Instruction that most recently wrote Register or to the
         current instruction's source2 operand if Register is not provided. """
         if not Register :
-            Inst = Trace[Self.Trace_Index][0]
+            Inst = Self.Trace[Self.Trace_Index][0]
             if Inst.Has_Src2() :
                 Register = Inst.Src2
             else :
@@ -371,7 +373,7 @@ class Navigator :
         """ Move to the next instruction that writes to Register or the current
         instruction's destination operand if Register is not provided."""
         if not Register :
-            Inst = Trace[Self.Trace_Index][0]
+            Inst = Self.Trace[Self.Trace_Index][0]
             if Inst.Has_Dest() :
                 Register = Inst.Dest
             else :
@@ -388,7 +390,7 @@ class Navigator :
         """ Move to the next instruction that uses Register or the current
         instruction's destination operand if Register is not provided."""
         if not Register :
-            Inst = Trace[Self.Trace_Index][0]
+            Inst = Self.Trace[Self.Trace_Index][0]
             if Inst.Has_Dest() :
                 Register = Inst.Dest
             else :
@@ -432,8 +434,8 @@ class Navigator :
         New_Trace_Index = Current_Trace_Index + Direction
         while (0 <= New_Trace_Index) and (New_Trace_Index < Trace_Length) and \
               (0 <= Current_Trace_Index) and (Current_Trace_Index < Trace_Length) :
-            Current_Address = Trace[Current_Trace_Index][0].Address
-            Next_Address = Trace[New_Trace_Index][0].Address
+            Current_Address = Self.Trace[Current_Trace_Index][0].Address
+            Next_Address = Self.Trace[New_Trace_Index][0].Address
             Difference = Current_Address - Next_Address
             if abs(Difference) == 4 :
                 New_Trace_Index = New_Trace_Index + Direction
@@ -450,7 +452,7 @@ class Navigator :
         Trace_Length = len(Trace)
         New_Trace_Index = Self.Trace_Index + Direction
         while (0 <= New_Trace_Index) and (New_Trace_Index < Trace_Length) :
-            if (Inst_Address == Trace[New_Trace_Index][0].Address) :
+            if (Inst_Address == Self.Trace[New_Trace_Index][0].Address) :
                 return New_Trace_Index
             else :
                 New_Trace_Index = New_Trace_Index + Direction
@@ -465,7 +467,7 @@ class Navigator :
         Trace_Length = len(Trace)
         New_Trace_Index = Self.Trace_Index + Direction
         while (0 <= New_Trace_Index) and (New_Trace_Index < Trace_Length) :
-            Inst = Trace[New_Trace_Index][0]
+            Inst = Self.Trace[New_Trace_Index][0]
             if Inst.Has_Dest() :
                 Dest = Inst.Dest
                 if (Dest_Reg == Dest) :
@@ -482,7 +484,7 @@ class Navigator :
         Trace_Length = len(Trace)
         New_Trace_Index = Self.Trace_Index + Direction
         while (0 <= New_Trace_Index) and (New_Trace_Index < Trace_Length) :
-            Inst = Trace[New_Trace_Index][0]
+            Inst = Self.Trace[New_Trace_Index][0]
             if Inst.Has_Src1() :
                 Src1 = Inst.Src1
                 if (Src == Src1) :

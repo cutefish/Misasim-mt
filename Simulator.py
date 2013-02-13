@@ -13,7 +13,7 @@ from Memory import *
 from ExecArbitrator import *
 from Logging import LogFactory
 from Parser import *
-from Profile import *
+from Tracer import *
 
 Logger = LogFactory.getLogger('Simulation')
 
@@ -28,7 +28,7 @@ class Simulation :
         Self.ReturnIP = 3000 + (randint(0,250) * 4)
         Self.Cores = []
         Self.Mem = Memory()
-        Self.Profiler = Profiler()
+        Self.Nav = Navigator()
         Self.NumCores = 2
         if Parent != None:
             Self.NumCores = Parent.NumCores
@@ -42,7 +42,7 @@ class Simulation :
 
     def Restart(Self) :
         """ This routine restores the simulation to the pre-execution state. """
-        Self.Profiler.Clear()
+        Self.Nav.Clear()
         for Core in Self.Cores:
             Core.Restart()
         Self.Mem.Clear()
@@ -89,7 +89,7 @@ class Simulation :
 
         if ExeLimit <= 0 :
             Logger.warn('Stopped after %i instructions.  Infinite Loop?' % (
-                len(Self.Profiler.Traces)))
+                len(Self.Nav.Trace)))
         #To do: check core status
         #elif Self.WECount >= WELimit :
         #    Self.Print_Warning('Stopped after %i instructions.  Too many warnings and errors' % (len(Self.Trace)))
@@ -132,7 +132,7 @@ def Main (FileName='fact-mt', NumCores=2, ExecLimit=10000) :
     print Sim.Report_Cores_State()
     print Sim.Report_Mem_State()
     #print
-    #print Sim.Profiler.Traces
+    #print Sim.Nav.Trace
 
 import sys
 

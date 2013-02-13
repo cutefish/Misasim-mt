@@ -4,18 +4,19 @@
 
 # Modified by Xiao yu
 
-class Profiler:
+class Tracer:
     """Traces instruction execution. """
     def __init__(Self):
-        Self.Traces = []
+        Self.Trace = []
 
     def Clear(Self):
-        Self.Traces = []
+        Self.Trace = []
 
-    def Trace(Self, Core, Instruction, OldValue, NewValue):
+    def Append_Trace(Self, Trace):
+        Core, Instruction, OldValue, NewValue = Trace
         CoreID = Core.CoreID
         CoreIP = Core.IP
-        Self.Traces.append((CoreID, CoreIP, Instruction, OldValue, NewValue))
+        Self.Trace.append((CoreID, CoreIP, Instruction, OldValue, NewValue))
 
     def Compute_Exe_Stats(Self):
         raise NotImplementedError

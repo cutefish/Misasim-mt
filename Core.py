@@ -22,7 +22,7 @@ class Core:
         Self.SpecRegs = {'Res':False, 'ResAddr':None}
         Self.CoreID = CoreID
         Self.CodeBase = Sim.CodeBase
-        Self.Profiler = Sim.Profiler
+        Self.Tracer = Sim.Nav
         Self.Instructions = None
         Self.IP = 0
         Self.Executor = InstExecutor(Self)
@@ -49,7 +49,7 @@ class Core:
             try:
                 Result, OldValue = I.ExecOn(Self.Executor)
                 I.Adjust_IP(Self.Executor)
-                Self.Profiler.Trace(Self, I, OldValue, Result)
+                Self.Tracer.Append_Trace((Self, I, OldValue, Result))
             except RuntimeError:
                 Self.Status = Self.Error
                 return
@@ -192,14 +192,16 @@ class InstExecutor:
             #check reserve
             if Self.Core.SpecRegs['Res'] == False:
                 Self.Core.Regs['HiLo'] = (0, 0)
-                return Self.Core.Mem.Peek(Address)
+                Old = Self.Core.Mem.Peek(Address)
+                return Old, Old
             if Self.Core.SpecRegs['ResAddr'] != Address:
                 Self.Core.Regs['HiLo'] = (0, 0)
-                return Self.Core.Mem.Peek(Address)
+                return Old, Old
             #still reserved
             Self.Core.Regs['HiLo'] = (1, 1)
         #actually write to the memory 
-        return Self.Core.Mem.Write(Address, Value)
+        Old = Self.Core.Mem.Write(Address, Value)
+        return Old, Value
 
     def Unwrite_Mem(Self, Address, OldValue) :
         """ This routine undoes a memory write. If the old value was undefined,
