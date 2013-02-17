@@ -16,6 +16,8 @@ from Tkinter        import *
 from tkFileDialog   import *
 from tkMessageBox   import *
 from Simulator      import *
+from Code import *
+from Navigator import *
 
 appPath = os.getcwd()
 
@@ -39,15 +41,19 @@ class MiSaSiM(Tk) :
         # load options parameters if options init file exists
         Self.Load_Init_File()
 
-        # init simulation
+        # init simulation and navigator
         Self.Sim = Simulation(Self)
+        Self.Nav = 
 
         # current core info display
-        Self.CurrCoreID = 0
+        Self.CurrCore = 0
         Self.CoreIDSetters = []
         for CoreID in range(Self.NumCores):
             def Setter():
-                Self.CoreIDSetter = CoreID
+                Self.CurrCore = CoreID
+                Self.MenuView.Refresh()
+                Self.RegView.Refresh()
+                Self.CodeView.Refresh()
             Self.CoreIDSetters.append(Setter)
 
         # make panes
@@ -104,7 +110,7 @@ class MiSaSiM(Tk) :
         Self.TopHelpMenu()
         Self.config(menu=Self.menubar)
 
-        Self.MenuView.CoreRefresh()
+        Self.MenuView.Refresh()
 
     def TopFileMenu(Self) :
         filemenu = Menu(Self.menubar, tearoff=0, relief=RAISED)
@@ -208,13 +214,13 @@ class MiSaSiM(Tk) :
         Self.DataView.Refresh(DataAddresses)
         Self.StackView.Refresh(StackAddresses)
         Self.CodeView.Refresh()
-        Self.MenuView.CoreRefresh()
+        Self.MenuView.Refresh()
 
     def Clear(Self, Event=None) :
         """ This routine clears the simulator, clearing and initializing all
         views. """
         Self.Sim = Simulation(Self)
-        Self.MenuView.CoreRefresh()
+        Self.MenuView.Refresh()
         Self.CodeView.Refresh()
         Self.TraceView.Refresh()
         Self.MessageView.Refresh()
@@ -519,17 +525,20 @@ class MiSaSiM(Tk) :
     def Process_Mods(Self, Mods, Forward) :
         """ This routine processes a Mod oject returned from the Navigator.
         The direction flag Forward indicates the direction of the trace motion. """
-        NewIP, NewTraceRow, RegMods, DataMods, StackMods = Mods
-        Self.MenuView.CoreRefresh()
+        NewTraceRow, CurrCore, IPMods, RegMods, DataMods, StackMods = Mods
+        Self.CurrCore = CurrCore
+        Self.MenuView.Update(IPMods)
+        Self.MenuView.Refresh()
         Self.TraceView.Select(NewTraceRow)
         DataAddresses, StackAddresses = Self.DataView.Collect_Sorted_Addresses()
         Self.DataView.Process_Mods(DataMods, Forward, DataAddresses)
         Self.StackView.Process_Mods(StackMods, Forward, StackAddresses)
         del DataAddresses, StackAddresses
-        Self.RegView.Refresh(RegMods)
+        Self.RegView.Update(RegMods)
+        Self.RegView.Refresh()
         SelectedRow = Self.Sim.Lookup_Instruction_Position(Self.Sim.IP) + 1
         Self.CodeView.Select(SelectedRow)
-#        Self.CodeView.Refresh()
+        Self.CodeView.Refresh()
 
 ######################### Menu Pane #########################
 
@@ -729,6 +738,7 @@ class MenuPane(Frame) :
         Frame.__init__(Self, Parent, relief = FLAT, bd=0)
         Self.BuildMenu(Parent)
         Self.BuildCoreInfo(Parent)
+        Self.CoreIPs = {}
 
     def BuildMenu(Self, Parent) :
         Self.IconImages = []
@@ -775,10 +785,14 @@ class MenuPane(Frame) :
         for Child in Self.children.values() :
             Child.destroy()
 
-    def CoreRefresh(Self) :       
-        Self.IPText.set('IP = %i' % Self.master.Sim.Cores[0].IP)
-        Self.CoreText.set('Core = %i' % Self.master.CurrCoreID)
+    def Update(Self, IPMods):
+        for CoreID, IP in IPMods.items():
+            Self.CoreIPs[CoreID] = IP
 
+    def Refresh(Self) :       
+        CurrCore = Self.master.CurrCore
+        Self.CoreText.set('Core = %i' % CurrCore)
+        Self.IPText.set('IP = %i' % Self.CoreIPs[CurrCore])
 
     def notdone(Self) :
         showerror('Not implemented', 'Not yet available')
@@ -951,6 +965,7 @@ class RegPane(Frame) :
         Sbar = Scrollbar(Self, orient='vertical')
         Self.Labels = []
         Self.Values = []
+        Self.RegTable = {}
         for Name in xrange(1,32) :
             Self.Values.append(Name)
             Self.Values[Name - 1] = StringVar()
@@ -972,23 +987,34 @@ class RegPane(Frame) :
         Self.Labels[32].config(font=('courier', Parent.FontSize, Parent.FontFace))    
         Self.DefColor = Self.Labels[0].cget("background")
 
-    def Refresh(Self, RegMods = []) :
-        """ This routine clears and initializes the RegView window. """
-        for Name in xrange(1,32) :
-            if Name in Self.master.Sim.Regs :
-                Value = Self.master.Sim.Regs[Name]
+    def Update(Self, RegMods):
+        """ This routine updates the RegTable with new modifications. """
+        for CoreID, RegMods in RegMods.items():
+            for Reg, Value in RegMods.items():
+                if not Self.RegTable.has_key(CoreID):
+                    Self.RegTable[CoreID] = {}
+                Self.RegTable[CoreID][Reg] = (Value, True)
+
+    def Refresh(Self):
+        """ Update the RegView Window. """
+        CurrCore = Self.master.CurrCore
+        for Name in xrange(1, 32):
+            if Name in Self.RegTable[CurrCore]:
+                Value, New = Self.RegTable[CurrCore][Name]
                 if Self.master.DisplayBase == 10 :
                     Self.Values[Name - 1].set('$%02d: %i' % (Name, Value))
                 elif Self.master.DisplayBase == 16 :
                     Self.Values[Name - 1].set('$%02d: %X' % (Name, Value))
                 Self.Labels[Name - 1].config(background= Self.DefColor)
-                if Name in RegMods :
+                if New:
                     Self.Labels[Name - 1].config(background= 'Yellow')
+                    Self.RegTable[CurrCore][Name] = (Value, False)
             else :
                 Self.Values[Name - 1].set('$%02d: ----' % (Name))
                 Self.Labels[Name - 1].config(background= Self.DefColor)
-        if 'HiLo' in Self.master.Sim.Regs :
-            Hi, Lo = Self.master.Sim.Regs['HiLo']
+        if 'HiLo' in Self.RegTable[CurrCore]:
+            Value, New = Self.RegTable[CurrCore]['HiLo']
+            Hi, Lo = Value
             if Self.master.DisplayBase == 10 :
                 Self.Values[31].set(' Hi: %i' % (Hi))
                 Self.Values[32].set(' Lo: %i' % (Lo))
@@ -997,9 +1023,10 @@ class RegPane(Frame) :
                 Self.Values[32].set(' Lo: %X' % (Lo))
             Self.Labels[31].config(background= Self.DefColor)
             Self.Labels[32].config(background= Self.DefColor)
-            if 'HiLo' in RegMods :
+            if New:
                 Self.Labels[31].config(background= 'Yellow')
                 Self.Labels[32].config(background= 'Yellow')
+                Self.RegTable[CurrCore]['HiLo'] = (Value, False)
         else :
             Self.Values[31].set(' Hi: ----')
             Self.Values[32].set(' Lo: ----')

@@ -6,6 +6,7 @@
 
 from Instructions import *
 from Opcodes import *
+from Code import *
 from Logging import LogFactory
 
 Logger = LogFactory.getLogger('Parser')
@@ -304,6 +305,7 @@ class InstParser:
                         Self.Symbols[I.Label] = I.Address
         Self.Solve_Labels()
         Self.Assign_Op_Functions()
+        return Code(Self.InitCommands, Self.Instructions, CodeBase)
 
     def Parse_Init(Self, Line):
         """This routine parses the init instructions, which in current state

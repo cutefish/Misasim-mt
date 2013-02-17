@@ -4,7 +4,7 @@
 
 # Modified by Xiao yu
 
-class Tracer:
+class Tracer(object):
     """Traces instruction execution. """
     def __init__(Self):
         Self.Trace = []
@@ -13,10 +13,7 @@ class Tracer:
         Self.Trace = []
 
     def Append(Self, Update):
-        Core, Instruction, OldValue, NewValue = Update
-        CoreID = Core.CoreID
-        CoreIP = Core.IP
-        Self.Trace.append((CoreID, CoreIP, Instruction, OldValue, NewValue))
+        Self.Trace.append(Update)
 
     def Compute_Exe_Stats(Self):
         raise NotImplementedError

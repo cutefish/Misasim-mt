@@ -10,10 +10,13 @@ class Navigator(Tracer):
     def __init__(Self, Sim, Analysis=None) :
         super(Navigator, Self).__init__()
         Self.Trace_Index = 0
-        Self.Lexical_Address = Sim.CodeBase
         Self.Analysis = Analysis
         # Navigator also may have Current_BB and Current_Loop attributes if there is an Analysis
         Self.Assign_BB_Loop(Sim.CodeBase, Analysis)
+        # Definitions passed down from Sim
+        Self.Lexical_Address = Sim.CodeBase
+        Self.StackBase = Sim.StackBase
+        Self.StartingSP = Sim.StartingSP
 
     def __repr__(Self) :
         return '[Nav %i Address: %i]' % (Self.Trace_Index, Self.Lexical_Address)
@@ -54,7 +57,7 @@ class Navigator(Tracer):
             New_Trace_Index = Self.Trace_Index + 1
             return Self.Move_to_Instruction(New_Trace_Index)
         else :
-            return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
+            return (Self.Trace_Index, 0, {}, {}, {}, {})
 
     def Prev_Inst(Self) :
         """Move to the previous instruction in the trace.  If at the start of trace,
@@ -63,14 +66,14 @@ class Navigator(Tracer):
             New_Trace_Index = Self.Trace_Index - 1
             return Self.Move_to_Instruction(New_Trace_Index)
         else :
-            return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
+            return (Self.Trace_Index, 0, {}, {}, {}, {})
 
     def Move_to_Top(Self) :
         """ Move to the first instruction in the trace. """
         if not Self.Trace_Index == 0 :
             return Self.Move_to_Instruction(0)
         else :
-            return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
+            return (Self.Trace_Index, 0, {}, {}, {}, {})
 
     def Move_to_Bottom(Self) :
         """ Move to the last instruction in the trace. """
@@ -78,7 +81,7 @@ class Navigator(Tracer):
         if not Self.Trace_Index == Last_Trace_Index :
             return Self.Move_to_Instruction(Last_Trace_Index)
         else :
-            return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
+            return (Self.Trace_Index, 0, {}, {}, {}, {})
         
     def Move_to_Instruction(Self, New_Trace_Index) :
         """ Update the current trace and lexical indices.  If New_I_Address is
@@ -113,7 +116,7 @@ class Navigator(Tracer):
         CoreID, CoreIP, Instruction, OldValue, NewValie = Self.Trace[New_Trace_Index]
         New_Lexical_Address = Instruction.Address
         Old_Trace_Index = Self.Trace_Index
-        IP_Changes, Reg_Changes, Mem_Changes = \
+        CurrCore, IP_Changes, Reg_Changes, Mem_Changes = \
                 Self.Update_Status(Old_Trace_Index, New_Trace_Index)
         Mem_Changes, Stack_Changes = Self.Classify_Mem_Changes(Mem_Changes)
         Self.Trace_Index = New_Trace_Index
@@ -122,9 +125,10 @@ class Navigator(Tracer):
                 Self.Assign_BB_Loop(New_Lexical_Address, Self.Analysis)
             # else: New_I is in the Current_BB already, so no need to change Current_BB/Loop
         # else: no need to update BB info since no CFA was performed.
-        return (IP_Changes, New_Trace_Index, Reg_Changes, Mem_Changes, Stack_Changes)
+        return (New_Trace_Index, CurrCore, IP_Changes, Reg_Changes, Mem_Changes, Stack_Changes)
 
     def Update_Status(Self, Old_Trace_Index, New_Trace_Index) :
+        CurrCore = None
         IP_Changes = {}
         Reg_Changes = {}
         Mem_Changes = {}
@@ -133,30 +137,38 @@ class Navigator(Tracer):
         else : Direction = 1
         while not Old_Trace_Index == New_Trace_Index :
             if Direction == 1 :
-                CoreID, CoreIP, New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index]
+                CoreID, InstIP, Where, Old, New = Self.Trace[Old_Trace_Index]
             else :
-                CoreID, CoreIP, New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index - 1]
-            Opcode = New_Inst.Opcode
-            if New_Value <> None :      # New_Value is None for jumps, branches
-                if Opcode in ('sw', 'sb') :
-                    Mem_Changes = Self.Update_Mem(New_Inst, New_Value, Old_Value, \
-                                                  Direction, Mem_Changes)
-                elif Opcode == 'swi' :      # software interrupt (Old/New_Values = dictionaries)
-                    raise NotImplementedError("interrupt handling instructions not implemneted");
-                    # Old_Value is actually a dictionary of Memory changes, indexed by mem addr
-                    # New_Value is actually a dictionary of Register changes, indexed by reg number
-                    # Each dictionary entry has a tuple value (Old, New).
-                    Reg_Changes = Self.Update_swi_Regs(New_Inst, New_Value, Direction, Reg_Changes)
-                    Mem_Changes = Self.Update_swi_Mem(New_Inst, Old_Value, Direction, Mem_Changes)
-                    if Direction == 1 :
-                        New_Inst.Sim.Handler.Next_SWI(New_Inst.Src1)
-                    else :
-                        New_Inst.Sim.Handler.Prev_SWI(New_Inst.Src1)
+                CoreID, InstIP, Where, Old, New = Self.Trace[Old_Trace_Index - 1]
+            # apply ip changes
+            IP_Changes[CoreID] = InstIP
+            CurrCore = CoreID
+            # Where, Old, New should be all None or all have value
+            if ((Where is None) and (Old is None) and (New is None)):
+                continue
+            if ((Where is None) or (Old is None) or (New is None)):
+                raise RuntimeError("Trace is messed up: Where=%s, Old=%s, New=%s" %(
+                    Where, Old, New))
+            # apply the side-effect of this instruction
+            if Where[0] == 'Mem':
+                Mem_Changes = Self.Update_Mem(Where[1], Old, New, Direction, Mem_Changes)
+            elif Where[0] == 'Reg':
+                Reg_Changes = Self.Update_Reg(CoreID, Where[1], Old, New, Direction, Reg_Changes)
+            else:
+                raise RuntimeError("Unknown side effect: %s. "
+                                   "Possibly because interrupt handling not implemented.")
+                # Old_Value is actually a dictionary of Memory changes, indexed by mem addr
+                # New_Value is actually a dictionary of Register changes, indexed by reg number
+                # Each dictionary entry has a tuple value (Old, New).
+                Reg_Changes = Self.Update_swi_Regs(New_Inst, New_Value, Direction, Reg_Changes)
+                Mem_Changes = Self.Update_swi_Mem(New_Inst, Old_Value, Direction, Mem_Changes)
+                if Direction == 1 :
+                    New_Inst.Sim.Handler.Next_SWI(New_Inst.Src1)
                 else :
-                    Reg_Changes = Self.Update_Reg(New_Inst, New_Value, Old_Value, \
-                                                  Direction, Reg_Changes)
+                    New_Inst.Sim.Handler.Prev_SWI(New_Inst.Src1)
+            # update trace index
             Old_Trace_Index = Old_Trace_Index + Direction
-        return (Reg_Changes, Mem_Changes)
+        return (CurrCore, IP_Changes, Reg_Changes, Mem_Changes)
 
     def Update_swi_Regs(Self, New_Inst, Reg_Change_Dictionary, Direction, Reg_Changes) :
         """Reg_Change_Dictionary is a dictionary of Register changes, indexed by
@@ -169,29 +181,23 @@ class Navigator(Tracer):
                                           Reg_Changes, Reg_Num)
         return Reg_Changes
     
-    def Update_Reg(Self, New_Inst, New_Value, Old_Value, Direction, Reg_Changes, Reg_Num=None) :
-        """ Reg_Num will be provided by updates due to software interrupts.  If none
-        is provided, the Reg_Num is determined from the instruction."""
-        Opcode = New_Inst.Opcode
-        if not Reg_Num :
-            if Opcode in ['mult', 'multu', 'div', 'divu'] :
-                Reg_Num = 'HiLo'
-            elif Opcode == 'jal' :
-                Reg_Num = 31
-            elif New_Inst.Has_Dest() :
-                Reg_Num = New_Inst.Dest
-            else :
-                Self.Sim.Print_Error('Instruction %s gets new value, but has no Dest.' \
-                                      % New_Inst)
-                return Reg_Changes
-        Allocation_Mod = (Reg_Changes.has_key(Reg_Num) and Reg_Changes[Reg_Num][1]) \
-                         or (Old_Value == 'undefined')
-        if Direction == 1 :  # forward
-            New_Inst.Write_Reg(Reg_Num, New_Value)
-            Reg_Changes[Reg_Num] = (New_Value, Allocation_Mod)
-        else :  # reverse
-            New_Inst.Unwrite_Reg(Reg_Num, Old_Value)
-            Reg_Changes[Reg_Num] = (Old_Value, Allocation_Mod)
+    def Update_Reg(Self, CoreID, RegNum, Old, New, Direction, Reg_Changes) :
+        #""" Reg_Num will be provided by updates due to software interrupts.  If none
+        #is provided, the Reg_Num is determined from the instruction."""
+        Allocation_Mod = (Reg_Changes.has_key(CoreID) and 
+                          Reg_Changes[CoreID].has_key(Reg_Num) and 
+                          Reg_Changes[CoreID][Reg_Num][1]) \
+                         or (Old == 'undefined')
+        if Direction == 1 :
+            #forward
+            if not Reg_Changes.has_key(CoreID):
+                Reg_Changes[CoreID] = {}
+            Reg_Changes[CoreID][Reg_Num] = (New_Value, Allocation_Mod)
+        else :  
+            # reverse
+            if not Reg_Changes.has_key(CoreID):
+                Reg_Changes[CoreID] = {}
+            Reg_Changes[CoreID][Reg_Num] = (Old_Value, Allocation_Mod)
         return Reg_Changes
 
     def Update_swi_Mem(Self, New_Inst, Mem_Change_Dictionary, Direction, Mem_Changes) :
@@ -205,22 +211,19 @@ class Navigator(Tracer):
                                           Mem_Changes, Mem_Address)
         return Mem_Changes
         
-    def Update_Mem(Self, New_Inst, New_Value, Old_Value, Direction, Mem_Changes, \
-                   Address=None) :
-        """ Address will be provided by updates due to software interrupts.  If none
-        is provided, the Address is computed from the instruction."""
-        if not Address :
-            Address = New_Inst.Read_Reg(New_Inst.Reg) + New_Inst.Offset
-            Address &= -4       # make word address
+    def Update_Mem(Self, Address, Old, New, Direction, Mem_Changes) :
+        #""" Address will be provided by updates due to software interrupts.  If none
+        #is provided, the Address is computed from the instruction."""
         Allocation_Mod = (Mem_Changes.has_key(Address) and Mem_Changes[Address][1]) \
                          or (Old_Value == 'undefined')
         if Direction == 1 :     # forward
-            New_Inst.Write_Mem(Address, New_Value)
-            Mem_Changes[Address] = (New_Value, Allocation_Mod)
+            Mem_Changes[Address] = (New, Allocation_Mod)
         else :  # reverse
-            New_Inst.Unwrite_Mem(Address, Old_Value)
-            Mem_Changes[Address] = (Old_Value, Allocation_Mod)
+            Mem_Changes[Address] = (Old, Allocation_Mod)
         return Mem_Changes
+
+    def Is_Stack_Address(Self, Address):
+        return Self.StackBase <= Address <= Self.StartingSP
 
     def Classify_Mem_Changes(Self, Mem_Changes) :
         """ Separate out stack-based memory changes from data memory changes.
@@ -228,7 +231,7 @@ class Navigator(Tracer):
         changes only) and Stack_Changes (entries involving stack addresses)."""
         Stack_Changes = {}
         for Address in Mem_Changes.keys() :
-            if Self.Sim.Stack_Address(Address) :
+            if Self.Is_Stack_Address(Address) :
                 Stack_Changes[Address] = Mem_Changes[Address]
                 del Mem_Changes[Address]
         return Mem_Changes, Stack_Changes

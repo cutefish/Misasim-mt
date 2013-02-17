@@ -21,35 +21,34 @@ class Core:
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
         Self.SpecRegs = {'Res':False, 'ResAddr':None}
         Self.CoreID = CoreID
-        Self.CodeBase = Sim.CodeBase
         Self.Tracer = Sim.Nav
-        Self.Instructions = None
         Self.IP = 0
         Self.Executor = InstExecutor(Self)
         Self.Mem = Sim.Mem #To do: should be a cache controller.
-        Self.Max_Inst_Address = Self.CodeBase
         Self.Status = Self.Running
+        Self.Code = None
 
-    def Load_Instructions(Self, Instructions):
-        Self.Instructions = Instructions
-        Self.Max_Inst_Address = Self.Instructions[-1].Address
+    def Load_Code(Self, Code):
+        Self.Code = Code
+        Self.IP = Self.Code.CodeBase
 
     def Restart(Self):
-        Self.IP = Self.CodeBase
+        if Self.Code != None:
+            Self.IP = Self.Code.CodeBase
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
 
     def Next(Self):
-        if not (Self.CodeBase <= Self.IP <= Self.Max_Inst_Address):
+        if not (Self.Code.Is_Valid_IP(Self.IP)):
             Logger.error("Invalid IP Address [%s] on Core [%s]" %(
                 Self.IP, Self.CoreID))
             Self.Status = Self.Error
             return
-        I = Self.Lookup_Instruction(Self.IP)
+        I = Self.Code.Lookup_Instruction(Self.IP)
         if I:
             try:
-                Result, OldValue = I.ExecOn(Self.Executor)
+                Where, Old, New = I.ExecOn(Self.Executor)
                 I.Adjust_IP(Self.Executor)
-                Self.Tracer.Append((Self, I, OldValue, Result))
+                Self.Tracer.Append((Self.CoreID, I.Address, Where, Old, New))
             except RuntimeError:
                 Self.Status = Self.Error
                 return
@@ -58,7 +57,7 @@ class Core:
                 Self.IP, Self.CoreID))
             Self.Status = Self.Error
             return
-        if (Self.IP == Self.Max_Inst_Address + 4 or 
+        if (not Self.Code.Is_Valid_IP(Self.IP) or 
             Self.IP == Self.ReturnIP):
             Self.Status = Self.Done
 
@@ -67,29 +66,6 @@ class Core:
 
     def HasError(Self):
         return Self.Status == Self.Error
-
-    def Lookup_Instruction(Self, Address) :
-        """ This routine looks up an instruction using an address. """
-        Position = Self.Lookup_Instruction_Position(Address)
-        if not Position == '':
-            return Self.Instructions[Position]
-        else :
-            return None
-
-    def Lookup_Instruction_Position(Self, Address) :
-        """ This routine looks up an instruction position using an address. First an index
-        is computing into the instruction list. If the instruction does not match, all
-        instructions are searched. """
-        Position = (Address - Self.CodeBase) / 4
-        if Position >= 0 and Position < len(Self.Instructions) :
-            if Self.Instructions[Position].Address == Address :
-                return Position
-            for Position in range(len(Self.Instructions)) :
-                I = Self.Instructions[Position]
-                if I.Address == Address :
-                    return Position
-        Self.Print_Error('%s is an invalid instruction address' % Address)
-        return ''
 
     def Clear_Mem_Reserve(Self, Address):
         if (Self.SpecRegs['Res'] == True and
@@ -161,13 +137,13 @@ class InstExecutor:
         Self.Core.Regs[RegNum] = Value
         return OldValue
 
-    def Unwrite_Reg(Self, RegNum, OldValue) :
-        """ This routine undoes a register write. If the old value was undefined,
-        the register entry is removed. """
-        if OldValue == 'undefined' :
-            del Self.Core.Regs[RegNum]
-        else :
-            Self.Core.Regs[RegNum] = OldValue
+    #def Unwrite_Reg(Self, RegNum, OldValue) :
+    #    """ This routine undoes a register write. If the old value was undefined,
+    #    the register entry is removed. """
+    #    if OldValue == 'undefined' :
+    #        del Self.Core.Regs[RegNum]
+    #    else :
+    #        Self.Core.Regs[RegNum] = OldValue
 
     def Read_Mem(Self, Address, Reserve=False) :
         """ This routine returns a value from memory; a warning message is printed
@@ -203,12 +179,12 @@ class InstExecutor:
         Old = Self.Core.Mem.Write(Address, Value)
         return Old, Value
 
-    def Unwrite_Mem(Self, Address, OldValue) :
-        """ This routine undoes a memory write. If the old value was undefined,
-        the memory entry is removed. """
-        if Self.NumCores > 1:
-            raise NotImplementedError('Unwrite_Mem not yet supported in mt mode')
-        Self.Core.Mem.Unwrite(Address, OldValue)
+    #def Unwrite_Mem(Self, Address, OldValue) :
+    #    """ This routine undoes a memory write. If the old value was undefined,
+    #    the memory entry is removed. """
+    #    if Self.NumCores > 1:
+    #        raise NotImplementedError('Unwrite_Mem not yet supported in mt mode')
+    #    Self.Core.Mem.Unwrite(Address, OldValue)
 
     def Handle_Interrupt(Self, Interrupt):
         """ This routine handles interrupt."""

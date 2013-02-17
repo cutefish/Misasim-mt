@@ -42,12 +42,12 @@ class Memory:
         Self.Data[Address] = Value
         return OldValue
 
-    def Unwrite(Self, Address, OldValue):
-        assert (Address % 4) == 0, 'Memory address not word aligned'
-        if OldValue == 'undefined' :
-            del Self.Data[Address]
-        else :
-            Self.Data[Address] = OldValue
+    #def Unwrite(Self, Address, OldValue):
+    #    assert (Address % 4) == 0, 'Memory address not word aligned'
+    #    if OldValue == 'undefined' :
+    #        del Self.Data[Address]
+    #    else :
+    #        Self.Data[Address] = OldValue
 
     def __str__(Self):
         Ret = '{'

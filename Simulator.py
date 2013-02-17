@@ -13,7 +13,7 @@ from Memory import *
 from ExecArbitrator import *
 from Logging import LogFactory
 from Parser import *
-from Tracer import *
+from Navigator import *
 
 Logger = LogFactory.getLogger('Simulation')
 
@@ -21,14 +21,17 @@ class Simulation :
     def __init__(Self, Parent=None) :
         Self.Parent = Parent
         Self.DataLabels = []  # cached for the benefit of the control flow analyzer
-        Self.CodeBase = 1000
         Self.DataBase = Self.DataEnd = 5000 + (randint(0,250) * 4)
+        Self.CodeBase = 1000
         Self.StackBase = 90000
         Self.StartingSP = 100000
         Self.ReturnIP = 3000 + (randint(0,250) * 4)
         Self.Cores = []
         Self.Mem = Memory()
-        Self.Nav = Navigator()
+        if Parent == None:
+            Self.Nav = Navigator(Self)
+        else:
+            Self.Nav = Parent.Nav
         Self.NumCores = 2
         if Parent != None:
             Self.NumCores = Parent.NumCores
@@ -36,7 +39,7 @@ class Simulation :
             Self.Cores.append(Core(CoreID, Self))
         Self.Mem.AddCores(Self.Cores)
         Self.Arbitrator = DefaultArbitrator()
-        Self.Instructions = []
+        Self.CodeLoaded = False
         Self.InitCommands = []
         Self.Restart()
 
@@ -60,22 +63,19 @@ class Simulation :
     #    """ Returns True if StackBase <= Address <= StartingSP, otherwise returns False."""
     #    return Self.StackBase <= Address <= Self.StartingSP
 
-    def Load_Program(Self, InputFileStream):
-        Parser = InstParser()
-        Parser.Parse_Program(InputFileStream, Self.CodeBase)
+    def Load_Code(Self, Code):
         for Core in Self.Cores:
-            Core.Load_Instructions(Parser.Instructions)
-        Self.Instructions = Parser.Instructions
-        Self.InitCommands = Parser.InitCommands
-        Logger.info('Done parsing program')
+            Core.Load_Code(Code)
+        Self.InitCommands = Code.InitCommands
+        Self.CodeLoaded = True
 
     def Simulate(Self, ExeLimit=10000) :
         """ This routine executes a program """
         #init first
         Self.Init_Simulation()
         #execute instructions
-        if not Self.Instructions:
-            Logger.error('Instructions not loaded')
+        if not Self.CodeLoaded:
+            Logger.error('Code not loaded')
             return
 
         #make a shallow copy of the cores
@@ -119,6 +119,13 @@ class Simulation :
             if Command == 'memset':
                 for Word in range(Len):
                     Self.Mem.Set(Offset + Word * 4, Value)
+
+    #for debug
+    def Load_Program(Self, InputFileStream):
+        Parser = InstParser()
+        Code = Parser.Parse_Program(InputFileStream, 1000)
+        Self.Load_Code(Code)
+        Logger.info('Done parsing program')
 
 def Main (FileName='fact-mt', NumCores=2, ExecLimit=10000) :
     class FakeUI:

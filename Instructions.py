@@ -116,7 +116,7 @@ class Three_Reg(Instruction) :
     def ExecOn(Self, Executor) :
         Result = Self.Op(Executor.Read_Reg(Self.Src1),Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg(Self.Dest, Result)
-        return Result, OldValue
+        return ('Reg', Self.Dest), OldValue, Result
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Dest),
@@ -153,7 +153,7 @@ class Two_Reg(Instruction) :
             raise RuntimeError('Divide by zero')
         Result = Self.Op(Executor.Read_Reg(Self.Src1), Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg('HiLo', Result)
-        return Result, OldValue
+        return ('Reg', 'HiLo'), OldValue, Result
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Src1),
@@ -182,7 +182,7 @@ class One_Reg_CoreID(Instruction):
         return Self
     def ExecOn(Self, Executor):
         OldValue = Executor.Write_Reg(Self.Reg, Executor.Core.CoreID)
-        return Executor.Core.CoreID, OldValue
+        return ('Reg', Self.Reg), OldValue, Executor.Core.CoreID
     def Print(Self):
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -203,7 +203,7 @@ class One_Reg_NumCores(Instruction):
         return Self
     def ExecOn(Self, Executor):
         OldValue = Executor.Write_Reg(Self.Reg, Executor.Core.NumCores)
-        return Executor.Core.NumCores, OldValue
+        return ('Reg', Self.Reg), OldValue, Executor.Core.NumCores
     def Print(Self):
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Reg),
@@ -228,13 +228,13 @@ class One_Reg(Instruction) :
         return Self
     def ExecOn(Self, Executor) :
         if Self.Opcode == 'jr' :
-            return None, None
+            return None, None, None
         elif Self.Opcode == 'mfhi' :
             Result = Executor.Read_Reg('HiLo')[0]
         elif Self.Opcode == 'mflo' :
             Result = Executor.Read_Reg('HiLo')[1]
         OldValue = Executor.Write_Reg(Self.Reg, Result)
-        return Result, OldValue
+        return ('Reg', Self.Reg), OldValue, Result
     def Adjust_IP(Self, Executor):
         if Self.Opcode == 'jr' :
             Executor.Jmpto_IP(Executor.Read_Reg(Self.Reg))
@@ -280,7 +280,7 @@ class Two_Reg_Sex_Immd(Instruction) :
     def ExecOn(Self, Executor):
         Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.RefTarget.Value)
         OldValue = Executor.Write_Reg(Self.Dest, Result)
-        return Result, OldValue
+        return ('Reg', Self.Dest), OldValue, Result
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Dest),
@@ -324,7 +324,7 @@ class Two_Reg_Immd(Instruction):
     def ExecOn(Self, Executor) :
         Result = Self.Op(Executor.Read_Reg(Self.Src1), Self.RefTarget.Value)
         OldValue = Executor.Write_Reg(Self.Dest, Result)
-        return Result, OldValue
+        return ('Reg', Self.Dest), OldValue, Result
     def Print(Self) :
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Dest),
@@ -372,7 +372,7 @@ class Two_Reg_Label(Instruction) :
                           == Executor.Read_Reg(Self.Src2))
         if Self.Opcode == 'bne' :
             Self.Predicate = Self.Predicate ^ 1
-        return None, None
+        return None, None, None
     def Adjust_IP(Self, Executor):
         if Self.Predicate :
             Executor.Jmpto_IP(Self.RefTarget.Value)
@@ -466,7 +466,7 @@ class One_Reg_Addr(Instruction) :
             if Self.Opcode == 'lb' :
                 Result = (Result + 128) % 256 - 128
             OldValue = Executor.Write_Reg(Self.Data, Result)
-            return Result, OldValue
+            return ('Reg', Self.Data), OldValue, Result
         if Self.Opcode == 'sb' :            # sb instruction
             Shift = 8 * (Address % 4)
             Address &=  -4
@@ -475,7 +475,7 @@ class One_Reg_Addr(Instruction) :
             Result = (OldValue & ((255 << Shift) ^ -1)) | NewByte << Shift
             Result = int((Result + 2**31) % 2**32 - 2**31)
             OldValue, NewValue = Executor.Write_Mem(Address, Result)
-            return NewValue, OldValue
+            return ('Mem', Address), OldValue, NewValue
         if Address % 4 <> 0 :
             Logger.error(
                 'Effective Address = %d; '
@@ -486,19 +486,19 @@ class One_Reg_Addr(Instruction) :
         if Self.Opcode == 'lw':        # lw instruction
             Result = Executor.Read_Mem(Address)
             OldValue = Executor.Write_Reg(Self.Data, Result)
-            return Result, OldValue
+            return ('Reg', Self.Data), OldValue, Result
         if Self.Opcode == 'sw':      # sw instruction
             Result = Executor.Read_Reg(Self.Data)
-            OldValue NewValue = Executor.Write_Mem(Address, Result)
-            return NewValue, OldValue
+            OldValue, NewValue = Executor.Write_Mem(Address, Result)
+            return ('Mem', Address), OldValue, NewValue
         if Self.Opcode == 'llw':
             Result = Executor.Read_Mem(Address, True)
             OldValue = Executor.Write_Reg(Self.Data, Result)
-            return Result, OldValue
+            return ('Reg', Self.Data), OldValue, Result
         if Self.Opcode == 'stcw':      # sw instruction
             Result = Executor.Read_Reg(Self.Data)
             OldValue, NewValue = Executor.Write_Mem(Address, Result, True)
-            return NewValue, OldValue
+            return ('Mem', Address), OldValue, NewValue
     def Print(Self):
         return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
                (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Data,\
@@ -533,11 +533,11 @@ class One_Label(Instruction) :
         return Self
     def ExecOn(Self, Executor) :
         if Self.Opcode == 'j' :         # j instruction
-            return None, None
+            return None, None, None
         elif Self.Opcode == 'jal' :     # jal instruction
             Result = Executor.Core.IP + 4
             OldValue = Executor.Write_Reg(31, Result)
-            return Result, OldValue
+            return ('Reg', 31), OldValue, Result
     def Adjust_IP(Self, Executor):
         Executor.Jmpto_IP(Self.RefTarget.Value)
     def Print(Self) :
