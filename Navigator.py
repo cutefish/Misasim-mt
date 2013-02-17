@@ -47,77 +47,85 @@ class Navigator(Tracer):
                                      % Address)
             # else: do nothing (no CFA has been performed)
 
-    def Next_Inst(Self, Trace) :
+    def Next_Inst(Self) :
         """Move to the next instruction in the trace.  If at the end of trace,
         do nothing. """
-        if len(Trace)-1 <> Self.Trace_Index :
+        if len(Self.Trace)-1 <> Self.Trace_Index :
             New_Trace_Index = Self.Trace_Index + 1
-            return Self.Move_to_Instruction(New_Trace_Index, Trace)
+            return Self.Move_to_Instruction(New_Trace_Index)
         else :
             return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
 
-    def Prev_Inst(Self, Trace) :
+    def Prev_Inst(Self) :
         """Move to the previous instruction in the trace.  If at the start of trace,
         do nothing. """
         if not Self.Trace_Index == 0 :
             New_Trace_Index = Self.Trace_Index - 1
-            return Self.Move_to_Instruction(New_Trace_Index, Trace)
+            return Self.Move_to_Instruction(New_Trace_Index)
         else :
             return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
 
-    def Move_to_Top(Self, Trace) :
+    def Move_to_Top(Self) :
         """ Move to the first instruction in the trace. """
         if not Self.Trace_Index == 0 :
-            return Self.Move_to_Instruction(0, Trace)
+            return Self.Move_to_Instruction(0)
         else :
             return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
 
-    def Move_to_Bottom(Self, Trace) :
+    def Move_to_Bottom(Self) :
         """ Move to the last instruction in the trace. """
-        Last_Trace_Index = len(Trace) - 1
+        Last_Trace_Index = len(Self.Trace) - 1
         if not Self.Trace_Index == Last_Trace_Index :
-            return Self.Move_to_Instruction(Last_Trace_Index, Trace)
+            return Self.Move_to_Instruction(Last_Trace_Index)
         else :
             return (Self.Lexical_Address, Self.Trace_Index, {}, {}, {})
         
-    def Move_to_Instruction(Self, New_Trace_Index, Trace) :
-        """ Update the current trace and lexical indices.  If New_I_Address is still within
-        the same Current_BB, then don't change Current BB or Current Loop.  Otherwise,
-        find out which BB it is in and whether it is in a loop.
-        Update the register file and memory to reflect the movement within the trace.
+    def Move_to_Instruction(Self, New_Trace_Index) :
+        """ Update the current trace and lexical indices.  If New_I_Address is
+        still within the same Current_BB, then don't change Current BB or
+        Current Loop.  Otherwise, find out which BB it is in and whether it is
+        in a loop.  Update the register file and memory to reflect the movement
+        within the trace.
+
         Return:
             + the new IP,
             + new trace index,
             + dictionary of changes to registers,
             + dictionary of changes to data memory (static and heap), and
             + dictionary of changes to stack.
-        Reg_Changes dictionary: indexed by reg number; data is a pair consisting of
-            the last value assigned to that register and whether the register was newly
-            allocated/deallocated during the move w/in the trace.
-        Mem_Changes dictionary: indexed by effective addresses of stores that occur
-            during the move w/in the trace and each item in the dictionary
-            contains the last value stored to that location and whether the location is
-            newly allocated/deallocated.
-        Stack_Changes dictionary: indexed by effective addresses of stack stores; data
-            is of the same type as in Mem_Changes.
-        This is the core function that all the other move instructions call. """
+
+        Reg_Changes dictionary: indexed by core id, then by reg number;
+        data is a pair consisting of the last value assigned to that register
+        and whether the register was newly allocated/deallocated during the
+        move w/in the trace.
+
+        Mem_Changes dictionary: indexed by effective addresses of stores that
+        occur during the move w/in the trace and each item in the dictionary
+        contains the last value stored to that location and whether the
+        location is newly allocated/deallocated.
+
+        Stack_Changes dictionary: indexed by effective addresses of stack
+        stores; data is of the same type as in Mem_Changes.
+
+        This is the core function that all the other move instructions call.
+
+        """
         CoreID, CoreIP, Instruction, OldValue, NewValie = Self.Trace[New_Trace_Index]
         New_Lexical_Address = Instruction.Address
         Old_Trace_Index = Self.Trace_Index
-        Reg_Changes, Mem_Changes = \
-                     Self.Update_Storage(Old_Trace_Index, New_Trace_Index)
+        IP_Changes, Reg_Changes, Mem_Changes = \
+                Self.Update_Status(Old_Trace_Index, New_Trace_Index)
         Mem_Changes, Stack_Changes = Self.Classify_Mem_Changes(Mem_Changes)
         Self.Trace_Index = New_Trace_Index
-        Self.Lexical_Address = New_Lexical_Address
-        Self.Sim.IP = New_Lexical_Address
         if Self.Analysis :
             if (not Self.Current_BB) or (not Self.Current_BB.Member_Instruction(New_Lexical_Address)) :
                 Self.Assign_BB_Loop(New_Lexical_Address, Self.Analysis)
             # else: New_I is in the Current_BB already, so no need to change Current_BB/Loop
         # else: no need to update BB info since no CFA was performed.
-        return (New_Lexical_Address, New_Trace_Index, Reg_Changes, Mem_Changes, Stack_Changes)
+        return (IP_Changes, New_Trace_Index, Reg_Changes, Mem_Changes, Stack_Changes)
 
-    def Update_Storage(Self, Old_Trace_Index, New_Trace_Index) :
+    def Update_Status(Self, Old_Trace_Index, New_Trace_Index) :
+        IP_Changes = {}
         Reg_Changes = {}
         Mem_Changes = {}
         if Old_Trace_Index > New_Trace_Index :
@@ -125,15 +133,16 @@ class Navigator(Tracer):
         else : Direction = 1
         while not Old_Trace_Index == New_Trace_Index :
             if Direction == 1 :
-                New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index]
+                CoreID, CoreIP, New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index]
             else :
-                New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index-1]
+                CoreID, CoreIP, New_Inst, New_Value, Old_Value = Self.Trace[Old_Trace_Index - 1]
             Opcode = New_Inst.Opcode
             if New_Value <> None :      # New_Value is None for jumps, branches
                 if Opcode in ('sw', 'sb') :
                     Mem_Changes = Self.Update_Mem(New_Inst, New_Value, Old_Value, \
                                                   Direction, Mem_Changes)
                 elif Opcode == 'swi' :      # software interrupt (Old/New_Values = dictionaries)
+                    raise NotImplementedError("interrupt handling instructions not implemneted");
                     # Old_Value is actually a dictionary of Memory changes, indexed by mem addr
                     # New_Value is actually a dictionary of Register changes, indexed by reg number
                     # Each dictionary entry has a tuple value (Old, New).

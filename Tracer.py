@@ -12,8 +12,8 @@ class Tracer:
     def Clear(Self):
         Self.Trace = []
 
-    def Append_Trace(Self, Trace):
-        Core, Instruction, OldValue, NewValue = Trace
+    def Append(Self, Update):
+        Core, Instruction, OldValue, NewValue = Update
         CoreID = Core.CoreID
         CoreIP = Core.IP
         Self.Trace.append((CoreID, CoreIP, Instruction, OldValue, NewValue))

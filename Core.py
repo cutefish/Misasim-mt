@@ -49,7 +49,7 @@ class Core:
             try:
                 Result, OldValue = I.ExecOn(Self.Executor)
                 I.Adjust_IP(Self.Executor)
-                Self.Tracer.Append_Trace((Self, I, OldValue, Result))
+                Self.Tracer.Append((Self, I, OldValue, Result))
             except RuntimeError:
                 Self.Status = Self.Error
                 return
