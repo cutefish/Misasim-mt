@@ -1,8 +1,9 @@
 # MiSaSiM MIPS ISA Simulator
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
-# Modified by Xiao yu
 
 class Tracer(object):
     """Traces instruction execution. """
@@ -17,6 +18,9 @@ class Tracer(object):
 
     def Compute_Exe_Stats(Self):
         raise NotImplementedError
+
+    def HasTrace(Self):
+        return Self.Trace != []
 
     #def Print_Exe_Stats(Self, Data=None) :
     #    """ This routine prints execution statistics. """

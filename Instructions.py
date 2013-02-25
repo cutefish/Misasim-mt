@@ -1,3 +1,9 @@
+# MiSaSiM MIPS ISA Simulator
+# Written by Linda and Scott Wills
+# (c) 2004-2012 Scott & Linda Wills
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
+
 
 from Logging import LogFactory
 from Opcodes import *
@@ -114,7 +120,8 @@ class Three_Reg(Instruction) :
             return ''
         return Self
     def ExecOn(Self, Executor) :
-        Result = Self.Op(Executor.Read_Reg(Self.Src1),Executor.Read_Reg(Self.Src2))
+        Result = Self.Op(Executor.Read_Reg(Self.Src1),
+                         Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg(Self.Dest, Result)
         return ('Reg', Self.Dest), OldValue, Result
     def Print(Self) :
@@ -124,17 +131,20 @@ class Three_Reg(Instruction) :
                            Self.Print_Reg(Self.Src2),
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
                 ('Label', Self.Print_Label(Self.Label)),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Dest)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src1)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src2)),
-                (None, '     '),
-                ('Comment', ' %s' % (Self.Comment)))
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Dest)),
+                (None, ', '),#inc to 27
+                ('Reg', Self.Print_Reg(Self.Src1)),
+                (None, ', '),#inc to 32
+                ('Reg', Self.Print_Reg(Self.Src2)),
+                (None, ' '),#inc to 36
+                (None, ' '*9), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class Two_Reg(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -151,7 +161,8 @@ class Two_Reg(Instruction) :
         if Self.Op == Div_Op and Executor.Read_Reg(Self.Src2) == 0 :
             Logger.error('Divide by zero')
             raise RuntimeError('Divide by zero')
-        Result = Self.Op(Executor.Read_Reg(Self.Src1), Executor.Read_Reg(Self.Src2))
+        Result = Self.Op(Executor.Read_Reg(Self.Src1), 
+                         Executor.Read_Reg(Self.Src2))
         OldValue = Executor.Write_Reg('HiLo', Result)
         return ('Reg', 'HiLo'), OldValue, Result
     def Print(Self) :
@@ -161,15 +172,18 @@ class Two_Reg(Instruction) :
                            '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Src1)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src2)),
-                (None, '          '),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Src1)),
+                (None, ', '), #inc to 27
+                ('Reg', Self.Print_Reg(Self.Src2)),
+                (None, ' '), #inc to 31
+                (None, ' '*14), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class One_Reg_CoreID(Instruction):
     def Parse(Self, Tokens, Parser):
@@ -189,8 +203,17 @@ class One_Reg_CoreID(Instruction):
                            '','',
                            Self.Comment)
     def Tagged_Print(Self):
-        return (('Address', '%4i' %(Self.Address)),
-                ('Reg', '$%02i' %(Self.Reg)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), # inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Reg)),
+                (None, ' '), # inc to 26
+                (None, ' '*19), #inc to 45
+                ('Comment', '%s' %Self.Comment),
+               )
 
 class One_Reg_NumCores(Instruction):
     def Parse(Self, Tokens, Parser):
@@ -198,7 +221,7 @@ class One_Reg_NumCores(Instruction):
             return ''
         Self.Reg = Parser.Parse_Register(Tokens[0])
         Self.Comment = Parser.Parse_Comment(Tokens[1:])
-        if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
+        if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == ''):
             return ''
         return Self
     def ExecOn(Self, Executor):
@@ -210,8 +233,17 @@ class One_Reg_NumCores(Instruction):
                            '','',
                            Self.Comment)
     def Tagged_Print(Self):
-        return (('Address', '%4i' %(Self.Address)),
-                ('Reg', '$%02i' %(Self.Reg)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), # inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Reg)),
+                (None, ' '), # inc to 26
+                (None, ' '*19), #inc to 45
+                ('Comment', '%s' %Self.Comment),
+               )
 
 class One_Reg(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -219,7 +251,7 @@ class One_Reg(Instruction) :
             return ''
         Self.Reg = Parser.Parse_Register(Tokens[0])
         Self.Comment = Parser.Parse_Comment(Tokens[1:])
-        if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == '') :
+        if Self.Reg == '' or (not Tokens[1:] == [] and Self.Comment == ''):
             return ''
         if Self.Opcode == 'jr' :
             Self.Src1 = Self.Reg
@@ -246,13 +278,16 @@ class One_Reg(Instruction) :
                            '', '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % Self.Address),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Reg)),
-                (None, '               '),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Reg)),
+                (None, ' '),#inc to 26
+                (None, ' '*19), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class Two_Reg_Sex_Immd(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -288,16 +323,18 @@ class Two_Reg_Sex_Immd(Instruction) :
                            Self.RefTarget.Print(),
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Dest)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src1)),
-                (None, ', '),
-                ('Immd', '%s' % (Self.RefTarget.Print())),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Dest)),
+                (None, ', '), #inc to 27
+                ('Reg', Self.Print_Reg(Self.Src1)),
+                (None, ', '), #inc to 32
+                ('Immd', '%s' % (Self.RefTarget.Print())), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class Two_Reg_Immd(Instruction):
     def Parse(Self, Tokens, Parser) :
@@ -332,16 +369,18 @@ class Two_Reg_Immd(Instruction):
                            Self.RefTarget.Print(),
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Dest)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src1)),
-                (None, ', '),
-                ('Immd', '%s' % (Self.RefTarget.Print())),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Dest)),
+                (None, ', '),#inc to 27
+                ('Reg', Self.Print_Reg(Self.Src1)),
+                (None, ', '),#inc to 32
+                ('Immd', '%s' % (Self.RefTarget.Print())), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class Two_Reg_Label(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -385,16 +424,18 @@ class Two_Reg_Label(Instruction) :
                            Self.RefTarget.Print(),
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
                 ('Label', Self.Print_Label(Self.Label)),
-                ('Opcode', ' %-5s ' % Self.Opcode),
-                ('Reg', '$%02i' % (Self.Src1)),
-                (None, ', '),
-                ('Reg', '$%02i' % (Self.Src2)),
-                (None, ', '),
-                ('Label', '%s' % (RefTarget.Print())),
-                ('Comment', ' %s' % (Self.Comment)))
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Src1)),
+                (None, ', '),#inc to 27
+                ('Reg', Self.Print_Reg(Self.Src2)),
+                (None, ', '),#inc to 32
+                ('Label', '%s' % (Self.RefTarget.Print())), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class One_Reg_Immd(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -418,14 +459,17 @@ class One_Reg_Immd(Instruction) :
                            '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
                 ('Label', Self.Print_Label(Self.Label)),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Dest)),
-                (None, ', '),
-                ('Immd', '%-13i' % (Self.Src1)),
-                ('Comment', ' %s' % (Self.Comment)))
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Dest)),
+                (None, ', '), #inc to 27
+                ('Immd', Self.Print_Immd(Self.Src1)), #inc to 40
+                (None, ' '*5), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class One_Reg_Addr(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -501,7 +545,8 @@ class One_Reg_Addr(Instruction) :
             return ('Mem', Address), OldValue, NewValue
     def Print(Self):
         return '%4i %s %-5s $%02i, %s($%02i)     %s' % \
-               (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Data,\
+               (Self.Address, Self.Print_Label(Self.Label), 
+                Self.Opcode, Self.Data,\
                 Self.RefTarget.Print(), Self.Reg, Self.Comment)
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Reg(Self.Data),
@@ -509,17 +554,20 @@ class One_Reg_Addr(Instruction) :
                            '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Reg', '$%02i' % (Self.Data)),
-                (None, ', '),
-                ('Immd', '%s' % (RefTarget.Print())),
-                (None, '('),
-                ('Reg', '$%02i' % (Self.Reg)),
-                (None, ')    '),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Reg', Self.Print_Reg(Self.Data)),
+                (None, ', '), #inc to 27
+                ('Immd', '%04i' % (Self.RefTarget.Value)), #inc to 31
+                (None, '('), #inc to 32
+                ('Reg', Self.Print_Reg(Self.Reg)),
+                (None, ')'), #inc to 36
+                (None, ' '*9), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class One_Label(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -528,7 +576,8 @@ class One_Label(Instruction) :
         Self.RefTarget = Reference()
         Self.RefTarget.Alias = Parser.Parse_Label_Ref(Tokens[0])
         Self.Comment = Parser.Parse_Comment(Tokens[1:])
-        if Self.RefTarget.Alias == '' or (not Tokens[1:] == [] and Self.Comment == '') :
+        if Self.RefTarget.Alias == '' or \
+           (not Tokens[1:] == [] and Self.Comment == ''):
             return ''
         return Self
     def ExecOn(Self, Executor) :
@@ -546,12 +595,15 @@ class One_Label(Instruction) :
                            '', '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
-                ('Label', (Self.Print_Label(Self.Label))),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Label', '%-18s' % (Self.RefTarget.Print())),
-                ('Comment', ' %s' % (Self.Comment)))
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
+                ('Label', Self.Print_Label(Self.Label)),
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Label', '%s' %(Self.RefTarget.Print())), #inc to 35
+                (None, ' '*10), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class One_Immd(Instruction) :
     def Parse(Self, Tokens, Parser) :
@@ -566,25 +618,27 @@ class One_Immd(Instruction) :
         if Executor.Known_Interrupt(Self.Src1) :
             return Executor.Handle_Interrupt(Self.Src1)
         else :
-            Logger.error('%i is an undefined software interrupt.' % (Self.Src1))
+            Logger.error('%i is an undefined software interrupt.' %(Self.Src1))
             raise RuntimeError('undefined software interrupt.')
             return {}, {}
     def Print(Self) :
         return '%4i %s %-5s %i                %s' % \
-               (Self.Address, Self.Print_Label(Self.Label), Self.Opcode, Self.Dest,\
-                Self.Src1, Self.Comment)
+               (Self.Address, Self.Print_Label(Self.Label), 
+                Self.Opcode, Self.Dest, Self.Src1, Self.Comment)
         return Self.Format(Self.Address, Self.Label, Self.Opcode,
                            Self.Print_Immd(Self.Src1),
                            '', '',
                            Self.Comment)
     def Tagged_Print(Self) :
-        return (('Address', '%4i' % (Self.Address)),
-                (None, ' '),
+        return (('Address', Self.Print_Address(Self.Address)),
+                (None, ' '), #inc to 5
                 ('Label', Self.Print_Label(Self.Label)),
-                ('Opcode', ' %-5s ' % (Self.Opcode)),
-                ('Immd', '%i' % (Self.Src1)),
-                (None, '               '),
-                ('Comment', ' %s' % (Self.Comment)))
+                (None, ' '), #inc to 16
+                ('Opcode', Self.Print_Opcode(Self.Opcode)),
+                (None, ' '), #inc to 22
+                ('Immd', Self.Print_Immd(Self.Src1)), #inc to 35
+                (None, ' '*10), #inc to 45
+                ('Comment', '%s' % (Self.Comment)))
 
 class Reference:
     def __init__(Self):
@@ -593,8 +647,11 @@ class Reference:
         Self.Value = ''
 
     def Print(Self):
+        Return = None
         if not Self.Solved:
-            return '%s(unsolved)' %(Self.Alias)
+            Return = '%s(unsolved)' %(Self.Alias)
         if Self.Alias == 'immd':
-            return '%-13i' %(Self.Value)
-        return '%s(%04i)' %(Self.Alias, Self.Value)
+            Return = '%04i' %(Self.Value)
+        else:
+            Return = '%s(%04i)' %(Self.Alias, Self.Value)
+        return Return.ljust(13)

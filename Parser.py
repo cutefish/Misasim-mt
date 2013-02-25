@@ -1,8 +1,9 @@
 # MiSaSiM MIPS ISA Simulator
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
-# Modified by Xiao Yu
 
 from Instructions import *
 from Opcodes import *
@@ -272,7 +273,7 @@ class InstParser:
         for I in Self.Instructions :
             I.Op = Op_Table.get(I.Opcode, 'undefined')
 
-    def Parse_Program (Self, InputFile, CodeBase) :
+    def Parse_Program(Self, InputFile, CodeBase) :
         """ This routine reads, tokenizes, and parses the program file. This is
         called from the User Interface when Load command is given."""
         Address = CodeBase             # define base IP

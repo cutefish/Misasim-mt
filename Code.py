@@ -1,10 +1,17 @@
-class Code:
-    """Code objects are parsed assemblies.
+# MiSaSiM MIPS ISA Simulator
+# Written by Linda and Scott Wills
+# (c) 2004-2012 Scott & Linda Wills
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
-    Each assembly code has a bunch of InitCommands and Instructions with a
-    CodeBase.  
+class Code:
+    """
+
+    Code objects are parsed assemblies. Each assembly code has a bunch of
+    InitCommands and Instructions with a CodeBase.  
    
-   """
+    """
+
     def __init__(Self, InitCommands, Instructions, CodeBase=1000):
         Self.CodeBase = CodeBase
         Self.Instructions = Instructions
@@ -22,9 +29,13 @@ class Code:
             return None
 
     def Lookup_Instruction_Position(Self, Address) :
-        """ This routine looks up an instruction position using an address. First an index
-        is computing into the instruction list. If the instruction does not match, all
-        instructions are searched. """
+        """ 
+
+        This routine looks up an instruction position using an address. First
+        an index is computing into the instruction list. If the instruction
+        does not match, all instructions are searched. 
+
+        """
         Position = (Address - Self.CodeBase) / 4
         if Position >= 0 and Position < len(Self.Instructions) :
             if Self.Instructions[Position].Address == Address :

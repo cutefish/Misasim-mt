@@ -2,7 +2,7 @@
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
 
-# Modified by Xiao Yu
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
 from Logging import LogFactory
 
@@ -21,7 +21,7 @@ class Core:
         Self.Regs = {0:0, 29:Self.StartingSP, 31:Self.ReturnIP}
         Self.SpecRegs = {'Res':False, 'ResAddr':None}
         Self.CoreID = CoreID
-        Self.Tracer = Sim.Nav
+        Self.Tracer = Sim.Tracer
         Self.IP = 0
         Self.Executor = InstExecutor(Self)
         Self.Mem = Sim.Mem #To do: should be a cache controller.
@@ -111,8 +111,12 @@ class InstExecutor:
         Self.Core.IP = IP
 
     def Read_Reg(Self, RegNum) :
-        """ This routine returns a register value; a warning message is printed
-        if the register has not been initialized. """
+        """ 
+       
+        This routine returns a register value; a warning message is printed if
+        the register has not been initialized. 
+       
+        """
         if RegNum in Self.Core.Regs :
             return Self.Core.Regs[RegNum]
         if RegNum == 'HiLo' :
@@ -123,9 +127,13 @@ class InstExecutor:
         return 0
 
     def Write_Reg(Self, RegNum, Value) :
-        """ This routine writes a register value. The replaced value is returned
+        """
+
+        This routine writes a register value. The replaced value is returned
         for the trace. A warning message is printed if a write to register zero
-        is attempted. """
+        is attempted. 
+
+        """
         if RegNum == 0 :
             Logger.error('Core %s; $00 cannot be modified' %Self.Core.CoreID)
             raise RuntimeError('$00 cannot be modified')
@@ -146,8 +154,12 @@ class InstExecutor:
     #        Self.Core.Regs[RegNum] = OldValue
 
     def Read_Mem(Self, Address, Reserve=False) :
-        """ This routine returns a value from memory; a warning message is printed
-        if the memory location has not been initialized. """
+        """
+
+        This routine returns a value from memory; a warning message is printed
+        if the memory location has not been initialized. 
+
+        """
         if Address < 0 :
             Logger.error('Core %s: %i is a negative address' % (
                 Self.Core.CoreID, Address))
@@ -158,8 +170,12 @@ class InstExecutor:
         return Self.Core.Mem.Read(Address)
 
     def Write_Mem(Self, Address, Value, Reserve=False) :
-        """ This routine writes a value to memory. The replaced value is returned
-        for the trace. """
+        """ 
+
+        This routine writes a value to memory. The replaced value is returned
+        for the trace. 
+
+        """
         if Address < 0 :
             Logger.error('Core %s: %i is a negative address' % (
                 Self.Core.CoreID, Address))

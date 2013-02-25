@@ -1,3 +1,9 @@
+# MiSaSiM MIPS ISA Simulator
+# Written by Linda and Scott Wills
+# (c) 2004-2012 Scott & Linda Wills
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
+
 
 MIPS_Opcodes = ['add', 'sub', 'addi', 'addu', 'subu', 'addiu', \
                 'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'and', \

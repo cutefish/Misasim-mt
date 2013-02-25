@@ -1,8 +1,8 @@
 # MiSaSiM MIPS ISA Simulator
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
-
-# Modified by Xiao Yu
+#
+# Major modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
 from os import listdir
 from random import seed, randint
@@ -13,28 +13,25 @@ from Memory import *
 from ExecArbitrator import *
 from Logging import LogFactory
 from Parser import *
-from Navigator import *
+from Tracer import *
 
 Logger = LogFactory.getLogger('Simulation')
 
 class Simulation :
-    def __init__(Self, Parent=None) :
-        Self.Parent = Parent
-        Self.DataLabels = []  # cached for the benefit of the control flow analyzer
-        Self.DataBase = Self.DataEnd = 5000 + (randint(0,250) * 4)
-        Self.CodeBase = 1000
-        Self.StackBase = 90000
-        Self.StartingSP = 100000
+    def __init__(Self, 
+                 CodeBase=1000, StackBase=90000, StartingSP=100000,
+                 NumCores=2, Tracer=Tracer()):
+        #Self.DataLabels = []  # cached for the benefit of the control flow analyzer
+        #Self.DataBase = Self.DataEnd = 5000 + (randint(0,250) * 4)
+        Self.CodeBase = CodeBase
+        Self.StackBase = StackBase
+        Self.StartingSP = StartingSP
         Self.ReturnIP = 3000 + (randint(0,250) * 4)
         Self.Cores = []
         Self.Mem = Memory()
-        if Parent == None:
-            Self.Nav = Navigator(Self)
-        else:
-            Self.Nav = Parent.Nav
-        Self.NumCores = 2
-        if Parent != None:
-            Self.NumCores = Parent.NumCores
+        Self.InitMemImage = {}
+        Self.Tracer = Tracer
+        Self.NumCores = NumCores
         for CoreID in range(Self.NumCores):
             Self.Cores.append(Core(CoreID, Self))
         Self.Mem.AddCores(Self.Cores)
@@ -45,7 +42,7 @@ class Simulation :
 
     def Restart(Self) :
         """ This routine restores the simulation to the pre-execution state. """
-        Self.Nav.Clear()
+        Self.Tracer.Clear()
         for Core in Self.Cores:
             Core.Restart()
         Self.Mem.Clear()
@@ -89,7 +86,8 @@ class Simulation :
 
         if ExeLimit <= 0 :
             Logger.warn('Stopped after %i instructions.  Infinite Loop?' % (
-                len(Self.Nav.Trace)))
+                len(Self.Tracer.Trace)))
+        
         #To do: check core status
         #elif Self.WECount >= WELimit :
         #    Self.Print_Warning('Stopped after %i instructions.  Too many warnings and errors' % (len(Self.Trace)))
@@ -119,27 +117,27 @@ class Simulation :
             if Command == 'memset':
                 for Word in range(Len):
                     Self.Mem.Set(Offset + Word * 4, Value)
+        Self.Save_Init_Mem_Image()
+
+    def Save_Init_Mem_Image(Self):
+        Self.InitMemImage = Self.Mem.Data.copy()
 
     #for debug
     def Load_Program(Self, InputFileStream):
         Parser = InstParser()
-        Code = Parser.Parse_Program(InputFileStream, 1000)
+        Code = Parser.Parse_Program(InputFileStream, Self.CodeBase)
         Self.Load_Code(Code)
         Logger.info('Done parsing program')
 
 def Main (FileName='fact-mt', NumCores=2, ExecLimit=10000) :
-    class FakeUI:
-        def __init__(Self):
-            Self.NumCores = NumCores
-    UI = FakeUI()
-    Sim = Simulation(UI)
+    Sim = Simulation()
     InputFile = open('%s.asm' % FileName, 'r')
     Sim.Load_Program(InputFile)
     Sim.Simulate(ExecLimit)
     print Sim.Report_Cores_State()
     print Sim.Report_Mem_State()
     #print
-    #print Sim.Nav.Trace
+    #print Sim.Tracer.Trace
 
 import sys
 
