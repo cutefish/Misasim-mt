@@ -166,11 +166,16 @@ class Navigator(Tracer):
         while not Old_Trace_Index == New_Trace_Index :
             if Direction == 1 :
                 CoreID, InstIP, Where, Old, New = Self.Trace[Old_Trace_Index]
+                print 'Navigator.Update_Status', CoreID, InstIP, Where, Old, New
             else :
                 CoreID, InstIP, Where, Old, New = Self.Trace[Old_Trace_Index - 1]
+                print 'Navigator.Update_Status', CoreID, InstIP, Where, Old, New
             # apply ip changes
             IP_Changes[CoreID] = InstIP
             CurrCore = CoreID
+            # update trace index
+            Old_Trace_Index = Old_Trace_Index + Direction
+            # update changes
             # Where, Old, New should be all None or all have value
             if ((Where is None) and (Old is None) and (New is None)):
                 continue
@@ -202,8 +207,6 @@ class Navigator(Tracer):
                     New_Inst.Sim.Handler.Next_SWI(New_Inst.Src1)
                 else :
                     New_Inst.Sim.Handler.Prev_SWI(New_Inst.Src1)
-            # update trace index
-            Old_Trace_Index = Old_Trace_Index + Direction
         return (CurrCore, IP_Changes, Reg_Changes, Mem_Changes)
 
     def Update_swi_Regs(Self, New_Inst, Reg_Change_Dictionary, 
@@ -262,7 +265,7 @@ class Navigator(Tracer):
         #Interruption handling not considered yet.
         Allocation_Mod = (
             Mem_Changes.has_key(Address) and Mem_Changes[Address][1]) \
-                         or (Old_Value == 'undefined')
+                         or (Old == 'undefined')
         if Direction == 1 :     # forward
             Mem_Changes[Address] = (New, Allocation_Mod)
         else :  # reverse

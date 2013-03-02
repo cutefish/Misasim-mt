@@ -115,9 +115,10 @@ class MiSaSiM(Tk) :
     def Create_CoreID_Setter(Self, ID):
         def Setter():
             Self.CurrCore = ID
-            Self.MenuView.Refresh()
-            Self.RegView.Refresh()
+            Self.MenuView.Update_View()
+            Self.RegView.Update_View()
             Self.CodeView.Refresh()
+            print 'UserInterface.CoreSetter', Self.CurrCore
         return Setter
 
     def TopFileMenu(Self) :
@@ -575,13 +576,11 @@ class MiSaSiM(Tk) :
         """
         NewTraceRow, CurrCore, IPMods, RegMods, DataMods, StackMods = Mods
         Self.CurrCore = CurrCore
-        Self.MenuView.Update(IPMods)
-        Self.MenuView.Refresh()
+        Self.MenuView.Process_Mods(IPMods)
         Self.TraceView.Select(NewTraceRow)
         Self.DataView.Process_Mods(DataMods, Forward)
         Self.StackView.Process_Mods(StackMods, Forward)
-        Self.RegView.Update(RegMods)
-        Self.RegView.Refresh()
+        Self.RegView.Process_Mods(RegMods)
         SelectedRow = Self.Code.Lookup_Instruction_Position(
             Self.MenuView.CoreIPs[Self.CurrCore])
         Self.CodeView.Select(SelectedRow)
@@ -800,8 +799,7 @@ class MenuPane(Frame) :
         Self.BuildMenu(Parent)
         Self.BuildCoreInfo(Parent)
         Self.CoreIPs = {}
-        for CoreID in range(Self.master.NumCores):
-            Self.CoreIPs[CoreID] = Self.master.CodeBase
+        Self.Refresh()
 
     def BuildMenu(Self, Parent) :
         Self.IconImages = []
@@ -860,14 +858,20 @@ class MenuPane(Frame) :
         for Child in Self.children.values() :
             Child.destroy()
 
-    def Update(Self, IPMods):
-        for CoreID, IP in IPMods.items():
-            Self.CoreIPs[CoreID] = IP
-
-    def Refresh(Self) :       
+    def Update_View(Self):
         CurrCore = Self.master.CurrCore
         Self.CoreText.set('Core = %i' % CurrCore)
         Self.IPText.set('IP = %i' % Self.CoreIPs[CurrCore])
+
+    def Process_Mods(Self, IPMods):
+        for CoreID, IP in IPMods.items():
+            Self.CoreIPs[CoreID] = IP
+        Self.Update_View()
+
+    def Refresh(Self) :       
+        for CoreID in range(Self.master.NumCores):
+            Self.CoreIPs[CoreID] = Self.master.CodeBase
+        Self.Update_View()
 
     def notdone(Self) :
         showerror('Not implemented', 'Not yet available')
@@ -917,7 +921,7 @@ class CodePane(Frame) :
                 Self.Code.insert(INSERT, '\n')
             SelectedRow = Self.master.Code.Lookup_Instruction_Position(
                 Self.master.MenuView.CoreIPs[Self.master.CurrCore])
-            Self.Select(SelectedRow)
+            Self.Select(SelectedRow + 1)
         Self.Code.config(state='disabled')
 
     def Select(Self, Row) :
@@ -1068,7 +1072,7 @@ class TracePane(Frame) :
                     Self.Trace.insert(
                         INSERT, 'core:%s old: %s, new: %s\n'%(CoreID, Old, New))
                 else :
-                    Self.Trace.insert(INSERT, '\n')
+                    Self.Trace.insert(INSERT, 'core:%s\n'%(CoreID))
             del Block
         Self.Trace.config(state='disabled')
 
@@ -1115,16 +1119,26 @@ class RegPane(Frame) :
             font=('courier', Parent.FontSize, Parent.FontFace))
         Self.DefColor = Self.Labels[0].cget("background")
 
-    def Update(Self, RegMods):
+    def Refresh(Self):
+        Self.RegTable = {}
+        for CoreID in range(Self.master.NumCores):
+            Self.RegTable[CoreID] = {}
+
+    def Process_Mods(Self, RegMods):
         """ This routine updates the RegTable with new modifications. """
         for CoreID, RegMods in RegMods.items():
             for Reg, State in RegMods.items():
                 Value, Alloced = State
                 if not Self.RegTable.has_key(CoreID):
                     Self.RegTable[CoreID] = {}
-                Self.RegTable[CoreID][Reg] = (Value, True)
+                if Alloced and isinstance(Value, str):
+                    #undefined
+                    del Self.RegTable[CoreID][Reg]
+                else:
+                    Self.RegTable[CoreID][Reg] = (Value, True)
+        Self.Update_View()
 
-    def Refresh(Self):
+    def Update_View(Self):
         """ Update the RegView Window. """
         CurrCore = Self.master.CurrCore
         for Name in xrange(1, 32):
@@ -1187,7 +1201,7 @@ class MemoryPane(Frame) :
         Self.Mem.delete('1.0', END)
         Self.MemImage = InitMemoryImage.copy()
         SortedAddresses = sorted(Self.MemImage.keys())
-        for Address, Value in Self.MemImage:
+        for Address, Value in Self.MemImage.iteritems():
             Self.Insert_Mem(Address, Value, SortedAddresses)
         Self.Paint_Static_Data(SortedAddresses)
         Self.Mem.config(state='disabled')
