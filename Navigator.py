@@ -2,7 +2,7 @@
 # Written by Linda and Scott Wills
 # (c) 2004-2012 Scott & Linda Wills
 
-# Modified by Xiao Yu
+# Modification for multi-core by Xiao Yu, xyu40@gatech.edu
 
 from Tracer import *
 

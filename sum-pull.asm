@@ -1,4 +1,5 @@
 # This program parallelly computes the summation of sequence 1 to n
+# The program uses load-linked and store conditional support
 #
 # Use memory for synchronization. 
 # Memory usage:
